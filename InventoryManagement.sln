@@ -18,6 +18,13 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InventoryManagement.Application.Tests", "tests\InventoryManagement.Application.Tests\InventoryManagement.Application.Tests.csproj", "{C625C146-3A47-4EF2-9030-3DC7B3EE86D1}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{208BA388-4CEE-2CBF-559C-5607C099C1F8}"
+	ProjectSection(SolutionItems) = preProject
+		docs\API-Testing-Guide.md = docs\API-Testing-Guide.md
+		docs\Database-Schema.md = docs\Database-Schema.md
+		docs\Data-Flow-Architecture.md = docs\Data-Flow-Architecture.md
+		docs\Domain-Model.md = docs\Domain-Model.md
+		docs\README.md = docs\README.md
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
