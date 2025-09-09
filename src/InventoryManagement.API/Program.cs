@@ -1,11 +1,10 @@
-using System.Security.Claims;
 using System.Text;
 using InventoryManagement.Application.Extensions;
 using InventoryManagement.Domain.Constants;
 using InventoryManagement.Infrastructure.Extensions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.IdentityModel.Tokens;
+using Scalar.AspNetCore;
 using Serilog;
 
 namespace InventoryManagement.API;
@@ -149,7 +148,7 @@ public class Program
             {
                 app.UseDeveloperExceptionPage();
                 app.MapOpenApi();
-                // TODO: Add Scalar for API documentation
+                app.MapScalarApiReference();
                 app.UseCors("DevelopmentPolicy");
             }
             else
