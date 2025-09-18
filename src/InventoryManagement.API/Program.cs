@@ -18,7 +18,7 @@ public class Program
             .ReadFrom.Configuration(
                 new ConfigurationBuilder()
                     .AddJsonFile("appsettings.json")
-                    .AddJsonFile("appsettings.Development.json", optional: true)
+                    .AddJsonFile("appsettings.Development.json", true)
                     .Build()
             )
             .CreateLogger();
@@ -83,7 +83,7 @@ public class Program
                         ValidateAudience = true,
                         ValidAudience = jwtSettings["Audience"],
                         ValidateLifetime = true,
-                        ClockSkew = TimeSpan.Zero,
+                        ClockSkew = TimeSpan.Zero
                     };
                 });
 
