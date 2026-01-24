@@ -70,7 +70,7 @@ Welcome to the comprehensive documentation for the **Inventory Management System
 
 ### Prerequisites Setup
 
-1. **Install .NET 9.0 SDK** (if not already installed)
+1. **Install .NET 10 SDK** (if not already installed)
 2. **Trust HTTPS certificates** for development:
    ```powershell
    dotnet dev-certs https --trust
