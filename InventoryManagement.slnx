@@ -18,19 +18,28 @@
       <Configuration Solution="Release|x64" Project="Release|Any CPU" />
       <Configuration Solution="Release|x86" Project="Release|Any CPU" />
     </Project>
-    <Project Path="src\InventoryManagement.Application\InventoryManagement.Application.csproj" Type="Classic C#">
+    <Project
+      Path="src\InventoryManagement.Application\InventoryManagement.Application.csproj"
+      Type="Classic C#"
+    >
       <Configuration Solution="Debug|x64" Project="Debug|Any CPU" />
       <Configuration Solution="Debug|x86" Project="Debug|Any CPU" />
       <Configuration Solution="Release|x64" Project="Release|Any CPU" />
       <Configuration Solution="Release|x86" Project="Release|Any CPU" />
     </Project>
-    <Project Path="src\InventoryManagement.Domain\InventoryManagement.Domain.csproj" Type="Classic C#">
+    <Project
+      Path="src\InventoryManagement.Domain\InventoryManagement.Domain.csproj"
+      Type="Classic C#"
+    >
       <Configuration Solution="Debug|x64" Project="Debug|Any CPU" />
       <Configuration Solution="Debug|x86" Project="Debug|Any CPU" />
       <Configuration Solution="Release|x64" Project="Release|Any CPU" />
       <Configuration Solution="Release|x86" Project="Release|Any CPU" />
     </Project>
-    <Project Path="src\InventoryManagement.Infrastructure\InventoryManagement.Infrastructure.csproj" Type="Classic C#">
+    <Project
+      Path="src\InventoryManagement.Infrastructure\InventoryManagement.Infrastructure.csproj"
+      Type="Classic C#"
+    >
       <Configuration Solution="Debug|x64" Project="Debug|Any CPU" />
       <Configuration Solution="Debug|x86" Project="Debug|Any CPU" />
       <Configuration Solution="Release|x64" Project="Release|Any CPU" />
@@ -38,7 +47,10 @@
     </Project>
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests\InventoryManagement.Application.Tests\InventoryManagement.Application.Tests.csproj" Type="Classic C#">
+    <Project
+      Path="tests\InventoryManagement.Application.Tests\InventoryManagement.Application.Tests.csproj"
+      Type="Classic C#"
+    >
       <Configuration Solution="Debug|x64" Project="Debug|Any CPU" />
       <Configuration Solution="Debug|x86" Project="Debug|Any CPU" />
       <Configuration Solution="Release|x64" Project="Release|Any CPU" />
