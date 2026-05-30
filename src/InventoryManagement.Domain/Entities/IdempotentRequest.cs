@@ -1,5 +1,3 @@
-using System;
-
 namespace InventoryManagement.Domain.Entities;
 
 public class IdempotentRequest

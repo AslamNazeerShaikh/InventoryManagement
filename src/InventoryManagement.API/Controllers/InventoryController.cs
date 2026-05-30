@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.DTOs;
 using InventoryManagement.Domain.Interfaces;
