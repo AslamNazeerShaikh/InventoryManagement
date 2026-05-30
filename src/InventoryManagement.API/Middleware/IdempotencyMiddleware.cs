@@ -1,16 +1,8 @@
-using System;
-using System.IO;
-using System.Linq;
 using System.Text;
-using System.Text.Json;
-using System.Threading.Tasks;
 using InventoryManagement.Domain.DTOs;
 using InventoryManagement.Domain.Entities;
 using InventoryManagement.Infrastructure.Data;
-using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace InventoryManagement.API.Middleware;
 
@@ -28,8 +20,10 @@ public class IdempotencyMiddleware
     public async Task InvokeAsync(HttpContext context)
     {
         // 1. Check for Idempotency-Key header
-        if (!context.Request.Headers.TryGetValue("Idempotency-Key", out var keyHeader) || 
-            string.IsNullOrWhiteSpace(keyHeader))
+        if (
+            !context.Request.Headers.TryGetValue("Idempotency-Key", out var keyHeader)
+            || string.IsNullOrWhiteSpace(keyHeader)
+        )
         {
             await _next(context);
             return;
@@ -50,50 +44,76 @@ public class IdempotencyMiddleware
         {
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             context.Response.ContentType = "application/json";
-            var badRequestResponse = ApiResponse<object>.Failure("Idempotency key is too long. Max length is 100 characters.");
+            var badRequestResponse = ApiResponse<object>.Failure(
+                "Idempotency key is too long. Max length is 100 characters."
+            );
             await context.Response.WriteAsJsonAsync(badRequestResponse);
             return;
         }
 
-        _logger.LogInformation("Processing idempotent request with key: {IdempotencyKey}", idempotencyKey);
+        _logger.LogInformation(
+            "Processing idempotent request with key: {IdempotencyKey}",
+            idempotencyKey
+        );
 
         var dbContext = context.RequestServices.GetRequiredService<AppDbContext>();
 
         // 3. Query the DB for existing request record
-        var existingRequest = await dbContext.IdempotentRequests
-            .FirstOrDefaultAsync(r => r.IdempotencyKey == idempotencyKey);
+        var existingRequest = await dbContext.IdempotentRequests.FirstOrDefaultAsync(r =>
+            r.IdempotencyKey == idempotencyKey
+        );
 
         if (existingRequest != null)
         {
             // 3a. Found and in-progress: prevent double submissions by returning 409 Conflict
             if (!existingRequest.IsCompleted)
             {
-                _logger.LogWarning("Conflict detected for idempotency key {IdempotencyKey}. Request is already in progress.", idempotencyKey);
+                _logger.LogWarning(
+                    "Conflict detected for idempotency key {IdempotencyKey}. Request is already in progress.",
+                    idempotencyKey
+                );
                 context.Response.StatusCode = StatusCodes.Status409Conflict;
                 context.Response.ContentType = "application/json";
-                var conflictResponse = ApiResponse<object>.Failure("A request with this idempotency key is already in progress.");
+                var conflictResponse = ApiResponse<object>.Failure(
+                    "A request with this idempotency key is already in progress."
+                );
                 await context.Response.WriteAsJsonAsync(conflictResponse);
                 return;
             }
 
             // 3b. Found and completed: verify that the method and path match to avoid key-collisions
-            if (existingRequest.RequestMethod != method || existingRequest.RequestPath != context.Request.Path)
+            if (
+                existingRequest.RequestMethod != method
+                || existingRequest.RequestPath != context.Request.Path
+            )
             {
-                _logger.LogError("Idempotency key collision detected for key {IdempotencyKey}. Saved: {SavedMethod} {SavedPath}, Incoming: {IncomingMethod} {IncomingPath}",
-                    idempotencyKey, existingRequest.RequestMethod, existingRequest.RequestPath, method, context.Request.Path);
-                
+                _logger.LogError(
+                    "Idempotency key collision detected for key {IdempotencyKey}. Saved: {SavedMethod} {SavedPath}, Incoming: {IncomingMethod} {IncomingPath}",
+                    idempotencyKey,
+                    existingRequest.RequestMethod,
+                    existingRequest.RequestPath,
+                    method,
+                    context.Request.Path
+                );
+
                 context.Response.StatusCode = StatusCodes.Status400BadRequest;
                 context.Response.ContentType = "application/json";
-                var collisionResponse = ApiResponse<object>.Failure("Idempotency key collision: This key was previously used for a different request.");
+                var collisionResponse = ApiResponse<object>.Failure(
+                    "Idempotency key collision: This key was previously used for a different request."
+                );
                 await context.Response.WriteAsJsonAsync(collisionResponse);
                 return;
             }
 
             // 3c. Replay the saved response
-            _logger.LogInformation("Replaying cached response for idempotency key: {IdempotencyKey}", idempotencyKey);
+            _logger.LogInformation(
+                "Replaying cached response for idempotency key: {IdempotencyKey}",
+                idempotencyKey
+            );
             context.Response.StatusCode = existingRequest.ResponseStatusCode;
-            context.Response.ContentType = existingRequest.ResponseContentType ?? "application/json";
-            
+            context.Response.ContentType =
+                existingRequest.ResponseContentType ?? "application/json";
+
             var bodyBytes = Encoding.UTF8.GetBytes(existingRequest.ResponseBody ?? string.Empty);
             await context.Response.Body.WriteAsync(bodyBytes, 0, bodyBytes.Length);
             return;
@@ -106,7 +126,7 @@ public class IdempotencyMiddleware
             RequestMethod = method,
             RequestPath = context.Request.Path,
             CreatedAt = DateTime.UtcNow,
-            IsCompleted = false
+            IsCompleted = false,
         };
 
         try
@@ -117,10 +137,16 @@ public class IdempotencyMiddleware
         catch (DbUpdateException ex)
         {
             // Handle concurrent inserts on the database level
-            _logger.LogWarning(ex, "DbUpdateException when locking key {IdempotencyKey}. Conflict assumed.", idempotencyKey);
+            _logger.LogWarning(
+                ex,
+                "DbUpdateException when locking key {IdempotencyKey}. Conflict assumed.",
+                idempotencyKey
+            );
             context.Response.StatusCode = StatusCodes.Status409Conflict;
             context.Response.ContentType = "application/json";
-            var conflictResponse = ApiResponse<object>.Failure("A request with this idempotency key is already in progress.");
+            var conflictResponse = ApiResponse<object>.Failure(
+                "A request with this idempotency key is already in progress."
+            );
             await context.Response.WriteAsJsonAsync(conflictResponse);
             return;
         }
@@ -136,14 +162,20 @@ public class IdempotencyMiddleware
 
             // 6. Capture the completed response
             responseBodyMemoryStream.Position = 0;
-            string responseBodyText = await new StreamReader(responseBodyMemoryStream).ReadToEndAsync();
+            string responseBodyText = await new StreamReader(
+                responseBodyMemoryStream
+            ).ReadToEndAsync();
 
             var statusCode = context.Response.StatusCode;
 
             // Delete the idempotency key for 5xx Server Errors to allow retry, otherwise save it
             if (statusCode >= 500)
             {
-                _logger.LogWarning("Request resulted in server error ({StatusCode}). Deleting idempotency key {IdempotencyKey} to allow retry.", statusCode, idempotencyKey);
+                _logger.LogWarning(
+                    "Request resulted in server error ({StatusCode}). Deleting idempotency key {IdempotencyKey} to allow retry.",
+                    statusCode,
+                    idempotencyKey
+                );
                 dbContext.IdempotentRequests.Remove(requestRecord);
                 await dbContext.SaveChangesAsync();
             }
@@ -165,12 +197,17 @@ public class IdempotencyMiddleware
         catch (Exception ex)
         {
             // On unhandled exception during request execution, delete lock record to allow retries
-            _logger.LogError(ex, "Unhandled exception during request with key {IdempotencyKey}. Releasing key lock.", idempotencyKey);
+            _logger.LogError(
+                ex,
+                "Unhandled exception during request with key {IdempotencyKey}. Releasing key lock.",
+                idempotencyKey
+            );
             try
             {
                 var cleanupContext = context.RequestServices.GetRequiredService<AppDbContext>();
-                var recordToClean = await cleanupContext.IdempotentRequests
-                    .FirstOrDefaultAsync(r => r.IdempotencyKey == idempotencyKey);
+                var recordToClean = await cleanupContext.IdempotentRequests.FirstOrDefaultAsync(r =>
+                    r.IdempotencyKey == idempotencyKey
+                );
                 if (recordToClean != null)
                 {
                     cleanupContext.IdempotentRequests.Remove(recordToClean);
@@ -179,7 +216,11 @@ public class IdempotencyMiddleware
             }
             catch (Exception cleanupEx)
             {
-                _logger.LogError(cleanupEx, "Failed to clean up idempotency key {IdempotencyKey} after failure.", idempotencyKey);
+                _logger.LogError(
+                    cleanupEx,
+                    "Failed to clean up idempotency key {IdempotencyKey} after failure.",
+                    idempotencyKey
+                );
             }
 
             throw; // Re-throw the original exception to let standard error handler catch it

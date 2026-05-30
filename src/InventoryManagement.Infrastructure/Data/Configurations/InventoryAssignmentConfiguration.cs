@@ -1,5 +1,4 @@
 using InventoryManagement.Domain.Entities;
-using InventoryManagement.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
