@@ -185,6 +185,7 @@ public class Program
             });
 
             app.UseHttpsRedirection();
+            app.UseMiddleware<InventoryManagement.API.Middleware.IdempotencyMiddleware>();
             app.UseRouting();
 
             // Authentication & Authorization
