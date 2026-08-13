@@ -54,10 +54,7 @@ public sealed class EfIdempotencyStore : IIdempotencyStore
                 {
                     if (IsSameRequest(existing, method, path, requestHash))
                     {
-                        return new IdempotencyBeginResult(
-                            IdempotencyBeginStatus.Replay,
-                            existing
-                        );
+                        return new IdempotencyBeginResult(IdempotencyBeginStatus.Replay, existing);
                     }
 
                     return new IdempotencyBeginResult(IdempotencyBeginStatus.KeyMismatch, null);
@@ -99,7 +96,8 @@ public sealed class EfIdempotencyStore : IIdempotencyStore
 
         try
         {
-            await _dbContext.IdempotentRequests.AddAsync(record, cancellationToken)
+            await _dbContext
+                .IdempotentRequests.AddAsync(record, cancellationToken)
                 .ConfigureAwait(false);
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return new IdempotencyBeginResult(IdempotencyBeginStatus.Proceed, null);

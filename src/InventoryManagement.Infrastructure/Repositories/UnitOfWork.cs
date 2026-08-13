@@ -47,9 +47,7 @@ public sealed class UnitOfWork : IUnitOfWork
         }
         catch (DbUpdateConcurrencyException ex)
         {
-            var entityName = ex.Entries.Count > 0
-                ? ex.Entries[0].Entity.GetType().Name
-                : "record";
+            var entityName = ex.Entries.Count > 0 ? ex.Entries[0].Entity.GetType().Name : "record";
             throw new ConcurrencyConflictException(entityName);
         }
     }

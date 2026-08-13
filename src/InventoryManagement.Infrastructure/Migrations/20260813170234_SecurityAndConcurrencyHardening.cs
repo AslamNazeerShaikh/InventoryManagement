@@ -13,64 +13,74 @@ namespace InventoryManagement.Infrastructure.Migrations
         {
             migrationBuilder.DropIndex(
                 name: "IX_IdempotentRequests_CreatedAt",
-                table: "IdempotentRequests");
+                table: "IdempotentRequests"
+            );
 
             migrationBuilder.AddColumn<Guid>(
                 name: "ConcurrencyToken",
                 table: "Users",
                 type: "TEXT",
                 nullable: false,
-                defaultValue: new Guid("00000000-0000-0000-0000-000000000000"));
+                defaultValue: new Guid("00000000-0000-0000-0000-000000000000")
+            );
 
             migrationBuilder.AddColumn<Guid>(
                 name: "ConcurrencyToken",
                 table: "InventoryAssignments",
                 type: "TEXT",
                 nullable: false,
-                defaultValue: new Guid("00000000-0000-0000-0000-000000000000"));
+                defaultValue: new Guid("00000000-0000-0000-0000-000000000000")
+            );
 
             migrationBuilder.AddColumn<Guid>(
                 name: "ConcurrencyToken",
                 table: "Inventories",
                 type: "TEXT",
                 nullable: false,
-                defaultValue: new Guid("00000000-0000-0000-0000-000000000000"));
+                defaultValue: new Guid("00000000-0000-0000-0000-000000000000")
+            );
 
             migrationBuilder.AddColumn<DateTime>(
                 name: "CompletedAt",
                 table: "IdempotentRequests",
                 type: "TEXT",
-                nullable: true);
+                nullable: true
+            );
 
             migrationBuilder.AddColumn<DateTime>(
                 name: "ExpiresAt",
                 table: "IdempotentRequests",
                 type: "TEXT",
-                nullable: true);
+                nullable: true
+            );
 
             migrationBuilder.AddColumn<DateTime>(
                 name: "LockExpiresAt",
                 table: "IdempotentRequests",
                 type: "TEXT",
                 nullable: false,
-                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
+                defaultValue: new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+            );
 
             migrationBuilder.AddColumn<string>(
                 name: "RequestHash",
                 table: "IdempotentRequests",
                 type: "TEXT",
                 maxLength: 64,
-                nullable: true);
+                nullable: true
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_IdempotentRequests_ExpiresAt",
                 table: "IdempotentRequests",
-                column: "ExpiresAt");
+                column: "ExpiresAt"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_IdempotentRequests_LockExpiresAt",
                 table: "IdempotentRequests",
-                column: "LockExpiresAt");
+                column: "LockExpiresAt"
+            );
         }
 
         /// <inheritdoc />
@@ -78,44 +88,33 @@ namespace InventoryManagement.Infrastructure.Migrations
         {
             migrationBuilder.DropIndex(
                 name: "IX_IdempotentRequests_ExpiresAt",
-                table: "IdempotentRequests");
+                table: "IdempotentRequests"
+            );
 
             migrationBuilder.DropIndex(
                 name: "IX_IdempotentRequests_LockExpiresAt",
-                table: "IdempotentRequests");
+                table: "IdempotentRequests"
+            );
 
-            migrationBuilder.DropColumn(
-                name: "ConcurrencyToken",
-                table: "Users");
+            migrationBuilder.DropColumn(name: "ConcurrencyToken", table: "Users");
 
-            migrationBuilder.DropColumn(
-                name: "ConcurrencyToken",
-                table: "InventoryAssignments");
+            migrationBuilder.DropColumn(name: "ConcurrencyToken", table: "InventoryAssignments");
 
-            migrationBuilder.DropColumn(
-                name: "ConcurrencyToken",
-                table: "Inventories");
+            migrationBuilder.DropColumn(name: "ConcurrencyToken", table: "Inventories");
 
-            migrationBuilder.DropColumn(
-                name: "CompletedAt",
-                table: "IdempotentRequests");
+            migrationBuilder.DropColumn(name: "CompletedAt", table: "IdempotentRequests");
 
-            migrationBuilder.DropColumn(
-                name: "ExpiresAt",
-                table: "IdempotentRequests");
+            migrationBuilder.DropColumn(name: "ExpiresAt", table: "IdempotentRequests");
 
-            migrationBuilder.DropColumn(
-                name: "LockExpiresAt",
-                table: "IdempotentRequests");
+            migrationBuilder.DropColumn(name: "LockExpiresAt", table: "IdempotentRequests");
 
-            migrationBuilder.DropColumn(
-                name: "RequestHash",
-                table: "IdempotentRequests");
+            migrationBuilder.DropColumn(name: "RequestHash", table: "IdempotentRequests");
 
             migrationBuilder.CreateIndex(
                 name: "IX_IdempotentRequests_CreatedAt",
                 table: "IdempotentRequests",
-                column: "CreatedAt");
+                column: "CreatedAt"
+            );
         }
     }
 }

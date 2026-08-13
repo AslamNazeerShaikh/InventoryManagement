@@ -15,8 +15,10 @@ internal sealed class MutableClock : IDateTimeProvider
 /// <summary>Stub secret client (unused for inline keys).</summary>
 internal sealed class StubSecretClient : ISecretClient
 {
-    public Task<string?> GetSecretAsync(string secretName, CancellationToken cancellationToken = default) =>
-        Task.FromResult<string?>(null);
+    public Task<string?> GetSecretAsync(
+        string secretName,
+        CancellationToken cancellationToken = default
+    ) => Task.FromResult<string?>(null);
 }
 
 public class PasswordHasherTests
@@ -82,7 +84,12 @@ public class TokenServiceTests
         var service = CreateService(clock);
 
         var token = await service.CreateAccessTokenAsync(
-            new Domain.DTOs.UserDto { Id = 1, Email = "a@b.com", Name = "A" }
+            new Domain.DTOs.UserDto
+            {
+                Id = 1,
+                Email = "a@b.com",
+                Name = "A",
+            }
         );
 
         Assert.False(string.IsNullOrWhiteSpace(token.Value));
@@ -105,6 +112,9 @@ public class TokenServiceTests
     public void CreateRefreshToken_ProducesUniqueValues()
     {
         var service = CreateService(new MutableClock());
-        Assert.NotEqual(service.CreateRefreshToken().RawValue, service.CreateRefreshToken().RawValue);
+        Assert.NotEqual(
+            service.CreateRefreshToken().RawValue,
+            service.CreateRefreshToken().RawValue
+        );
     }
 }

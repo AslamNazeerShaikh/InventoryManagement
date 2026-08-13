@@ -35,7 +35,10 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
             && httpContext.RequestAborted.IsCancellationRequested
         )
         {
-            _logger.LogInformation("Request {Path} was cancelled by the client.", httpContext.Request.Path);
+            _logger.LogInformation(
+                "Request {Path} was cancelled by the client.",
+                httpContext.Request.Path
+            );
             return true;
         }
 
@@ -79,9 +82,15 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
             DuplicateEntityException e => (StatusCodes.Status409Conflict, e.Message),
             ConcurrencyConflictException e => (StatusCodes.Status409Conflict, e.Message),
             UnauthorizedOperationException e => (StatusCodes.Status403Forbidden, e.Message),
-            InsufficientInventoryException e => (StatusCodes.Status422UnprocessableEntity, e.Message),
+            InsufficientInventoryException e => (
+                StatusCodes.Status422UnprocessableEntity,
+                e.Message
+            ),
             ExpiredInventoryException e => (StatusCodes.Status422UnprocessableEntity, e.Message),
-            InvalidOperationDomainException e => (StatusCodes.Status422UnprocessableEntity, e.Message),
+            InvalidOperationDomainException e => (
+                StatusCodes.Status422UnprocessableEntity,
+                e.Message
+            ),
             DomainException e => (StatusCodes.Status400BadRequest, e.Message),
             _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred."),
         };

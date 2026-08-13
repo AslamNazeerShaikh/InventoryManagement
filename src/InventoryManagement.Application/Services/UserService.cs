@@ -33,7 +33,10 @@ public sealed class UserService : IUserService
     )
     {
         var users = await _unitOfWork
-            .Users.ListAsync(orderBy: q => q.OrderBy(u => u.Name), cancellationToken: cancellationToken)
+            .Users.ListAsync(
+                orderBy: q => q.OrderBy(u => u.Name),
+                cancellationToken: cancellationToken
+            )
             .ConfigureAwait(false);
         return ApiResponse<IEnumerable<UserDto>>.Success(users.ToDto());
     }
@@ -44,7 +47,9 @@ public sealed class UserService : IUserService
         CancellationToken cancellationToken = default
     )
     {
-        var user = await _unitOfWork.Users.GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
+        var user = await _unitOfWork
+            .Users.GetByIdAsync(id, cancellationToken)
+            .ConfigureAwait(false);
         return user is null
             ? ApiResponse<UserDto>.Failure("User not found")
             : ApiResponse<UserDto>.Success(user.ToDto());
@@ -56,7 +61,8 @@ public sealed class UserService : IUserService
         CancellationToken cancellationToken = default
     )
     {
-        var user = await _unitOfWork.Users.GetByEmailAsync(email, cancellationToken)
+        var user = await _unitOfWork
+            .Users.GetByEmailAsync(email, cancellationToken)
             .ConfigureAwait(false);
         return user is null
             ? ApiResponse<UserDto>.Failure("User not found")
@@ -95,7 +101,9 @@ public sealed class UserService : IUserService
         CancellationToken cancellationToken = default
     )
     {
-        var user = await _unitOfWork.Users.GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
+        var user = await _unitOfWork
+            .Users.GetByIdAsync(id, cancellationToken)
+            .ConfigureAwait(false);
         if (user is null)
         {
             return ApiResponse<UserDto>.Failure("User not found");
@@ -124,7 +132,9 @@ public sealed class UserService : IUserService
         CancellationToken cancellationToken = default
     )
     {
-        var user = await _unitOfWork.Users.GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
+        var user = await _unitOfWork
+            .Users.GetByIdAsync(id, cancellationToken)
+            .ConfigureAwait(false);
         if (user is null)
         {
             return ApiResponse<bool>.Failure("User not found");
@@ -143,7 +153,8 @@ public sealed class UserService : IUserService
         CancellationToken cancellationToken = default
     )
     {
-        var nurses = await _unitOfWork.Users.GetNursePractitionersAsync(cancellationToken)
+        var nurses = await _unitOfWork
+            .Users.GetNursePractitionersAsync(cancellationToken)
             .ConfigureAwait(false);
         return ApiResponse<IEnumerable<UserDto>>.Success(nurses.ToDto());
     }
@@ -153,7 +164,8 @@ public sealed class UserService : IUserService
         CancellationToken cancellationToken = default
     )
     {
-        var users = await _unitOfWork.Users.GetActiveUsersAsync(cancellationToken)
+        var users = await _unitOfWork
+            .Users.GetActiveUsersAsync(cancellationToken)
             .ConfigureAwait(false);
         return ApiResponse<IEnumerable<UserDto>>.Success(users.ToDto());
     }

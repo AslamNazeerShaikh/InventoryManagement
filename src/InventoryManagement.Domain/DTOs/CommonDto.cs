@@ -59,8 +59,7 @@ public class PagedResult<T>
     public int PageSize { get; set; }
 
     /// <summary>Total number of pages (derived).</summary>
-    public int TotalPages =>
-        PageSize <= 0 ? 0 : (int)Math.Ceiling((double)TotalCount / PageSize);
+    public int TotalPages => PageSize <= 0 ? 0 : (int)Math.Ceiling((double)TotalCount / PageSize);
 
     /// <summary>Whether a next page exists (derived).</summary>
     public bool HasNextPage => PageNumber < TotalPages;

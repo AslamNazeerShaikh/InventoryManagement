@@ -17,9 +17,7 @@ public class Program
     public static async Task<int> Main(string[] args)
     {
         // Stage 1: a bootstrap logger captures failures during startup itself.
-        Log.Logger = new LoggerConfiguration()
-            .WriteTo.Console()
-            .CreateBootstrapLogger();
+        Log.Logger = new LoggerConfiguration().WriteTo.Console().CreateBootstrapLogger();
 
         try
         {

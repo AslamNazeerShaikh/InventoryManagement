@@ -81,8 +81,7 @@ public static class ServiceCollectionExtensions
 
         await context.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
 
-        var adminEmail =
-            configuration["SeedData:AdminEmail"] ?? "admin@inventorymanagement.com";
+        var adminEmail = configuration["SeedData:AdminEmail"] ?? "admin@inventorymanagement.com";
 
         if (
             await context
@@ -132,7 +131,8 @@ public static class ServiceCollectionExtensions
 
     /// <summary>Generates a cryptographically strong, URL-safe password.</summary>
     private static string GenerateStrongPassword() =>
-        Convert.ToBase64String(RandomNumberGenerator.GetBytes(24))
+        Convert
+            .ToBase64String(RandomNumberGenerator.GetBytes(24))
             .Replace('+', 'A')
             .Replace('/', 'B')
             .Replace('=', 'C');

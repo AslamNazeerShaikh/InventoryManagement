@@ -36,9 +36,7 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
         var assignments = await _unitOfWork
             .InventoryAssignments.ListAsync(
                 include: q =>
-                    q.Include(x => x.Inventory)
-                        .Include(x => x.User)
-                        .Include(x => x.AssignedByUser),
+                    q.Include(x => x.Inventory).Include(x => x.User).Include(x => x.AssignedByUser),
                 orderBy: q => q.OrderByDescending(x => x.AssignedDate),
                 cancellationToken: cancellationToken
             )
@@ -80,10 +78,8 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
             .ExecuteInTransactionAsync(
                 async ct =>
                 {
-                    var inventory = await _unitOfWork.Inventories.GetByIdAsync(
-                        createAssignmentDto.InventoryId,
-                        ct
-                    )
+                    var inventory = await _unitOfWork
+                        .Inventories.GetByIdAsync(createAssignmentDto.InventoryId, ct)
                         .ConfigureAwait(false);
                     if (inventory is null)
                     {
@@ -95,7 +91,10 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
                         return Failed("Inventory is not available for assignment");
                     }
 
-                    if (inventory.ExpiryDate.HasValue && inventory.ExpiryDate.Value < DateTime.UtcNow)
+                    if (
+                        inventory.ExpiryDate.HasValue
+                        && inventory.ExpiryDate.Value < DateTime.UtcNow
+                    )
                     {
                         return Failed("Cannot assign expired inventory");
                     }
@@ -108,7 +107,8 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
                         );
                     }
 
-                    var user = await _unitOfWork.Users.GetByIdAsync(createAssignmentDto.UserId, ct)
+                    var user = await _unitOfWork
+                        .Users.GetByIdAsync(createAssignmentDto.UserId, ct)
                         .ConfigureAwait(false);
                     if (user is null)
                     {
@@ -118,7 +118,8 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
                     var assignment = createAssignmentDto.ToEntity();
                     assignment.AssignedByUserId = assignedByUserId;
                     assignment.Status = AssignmentStatus.Active;
-                    await _unitOfWork.InventoryAssignments.AddAsync(assignment, ct)
+                    await _unitOfWork
+                        .InventoryAssignments.AddAsync(assignment, ct)
                         .ConfigureAwait(false);
 
                     inventory.AvailableQuantity -= createAssignmentDto.AssignedQuantity;
@@ -302,9 +303,10 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
     }
 
     /// <inheritdoc />
-    public async Task<
-        ApiResponse<IEnumerable<InventoryAssignmentDto>>
-    > GetAssignmentsByUserIdAsync(int userId, CancellationToken cancellationToken = default)
+    public async Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetAssignmentsByUserIdAsync(
+        int userId,
+        CancellationToken cancellationToken = default
+    )
     {
         var assignments = await _unitOfWork
             .InventoryAssignments.GetAssignmentsByUserIdAsync(userId, cancellationToken)
@@ -317,9 +319,8 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
         CancellationToken cancellationToken = default
     )
     {
-        var assignments = await _unitOfWork.InventoryAssignments.GetActiveAssignmentsAsync(
-            cancellationToken
-        )
+        var assignments = await _unitOfWork
+            .InventoryAssignments.GetActiveAssignmentsAsync(cancellationToken)
             .ConfigureAwait(false);
         return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Success(assignments.ToDto());
     }
@@ -340,9 +341,8 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
         CancellationToken cancellationToken = default
     )
     {
-        var assignments = await _unitOfWork.InventoryAssignments.GetOverdueAssignmentsAsync(
-            cancellationToken
-        )
+        var assignments = await _unitOfWork
+            .InventoryAssignments.GetOverdueAssignmentsAsync(cancellationToken)
             .ConfigureAwait(false);
         return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Success(assignments.ToDto());
     }
@@ -353,7 +353,8 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
         CancellationToken cancellationToken = default
     )
     {
-        var inventory = await _unitOfWork.Inventories.GetByIdAsync(inventoryId, cancellationToken)
+        var inventory = await _unitOfWork
+            .Inventories.GetByIdAsync(inventoryId, cancellationToken)
             .ConfigureAwait(false);
         if (inventory is null)
         {
@@ -390,9 +391,7 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
                 pageSize,
                 orderBy: q => q.OrderByDescending(x => x.AssignedDate),
                 include: q =>
-                    q.Include(x => x.Inventory)
-                        .Include(x => x.User)
-                        .Include(x => x.AssignedByUser),
+                    q.Include(x => x.Inventory).Include(x => x.User).Include(x => x.AssignedByUser),
                 cancellationToken: cancellationToken
             )
             .ConfigureAwait(false);
@@ -425,5 +424,9 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
 
     private static TransactionOutcome Succeeded(int assignmentId) => new(true, assignmentId, null);
 
-    private readonly record struct TransactionOutcome(bool Success, int AssignmentId, string? Error);
+    private readonly record struct TransactionOutcome(
+        bool Success,
+        int AssignmentId,
+        string? Error
+    );
 }

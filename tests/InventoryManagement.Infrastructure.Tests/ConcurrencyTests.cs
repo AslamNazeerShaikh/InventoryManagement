@@ -43,7 +43,12 @@ public class ConcurrencyTests
     {
         using var fixture = new SqliteInMemoryFixture();
 
-        var inventory = new Inventory { EquipmentName = "Pump", Quantity = 1, AvailableQuantity = 1 };
+        var inventory = new Inventory
+        {
+            EquipmentName = "Pump",
+            Quantity = 1,
+            AvailableQuantity = 1,
+        };
         fixture.Context.Inventories.Add(inventory);
         await fixture.Context.SaveChangesAsync();
         var original = inventory.ConcurrencyToken;

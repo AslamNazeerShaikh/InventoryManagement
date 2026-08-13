@@ -159,6 +159,5 @@ public class UsersController : ControllerBase
     private bool TryGetCallerId(out int userId) =>
         int.TryParse(User.FindFirst(AuthConstants.Claims.UserId)?.Value, out userId);
 
-    private bool IsAdmin() =>
-        User.FindFirst(AuthConstants.Claims.IsAdmin)?.Value == "True";
+    private bool IsAdmin() => User.FindFirst(AuthConstants.Claims.IsAdmin)?.Value == "True";
 }
