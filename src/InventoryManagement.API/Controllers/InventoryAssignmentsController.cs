@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace InventoryManagement.API.Controllers;
 
+/// <summary>Assignment (allocation/return) endpoints. Listing across users requires elevated roles;
+/// callers may always access their own assignments.</summary>
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
@@ -15,6 +17,7 @@ public class InventoryAssignmentsController : ControllerBase
     private readonly IInventoryAssignmentService _assignmentService;
     private readonly ILogger<InventoryAssignmentsController> _logger;
 
+    /// <summary>Creates the controller.</summary>
     public InventoryAssignmentsController(
         IInventoryAssignmentService assignmentService,
         ILogger<InventoryAssignmentsController> logger
@@ -24,529 +27,214 @@ public class InventoryAssignmentsController : ControllerBase
         _logger = logger;
     }
 
-    /// <summary>
-    /// Get all assignments (Admin or Provider)
-    /// </summary>
-    /// <returns>List of all assignments</returns>
+    /// <summary>Lists all assignments (Admin or Provider).</summary>
     [HttpGet]
     [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
     public async Task<
         ActionResult<ApiResponse<IEnumerable<InventoryAssignmentDto>>>
-    > GetAllAssignments()
-    {
-        try
-        {
-            _logger.LogInformation("Requesting all assignments");
-            var result = await _assignmentService.GetAllAssignmentsAsync();
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving all assignments");
-            return StatusCode(
-                500,
-                ApiResponse<IEnumerable<InventoryAssignmentDto>>.Failure(
-                    "An error occurred while retrieving assignments"
-                )
-            );
-        }
-    }
+    > GetAllAssignments(CancellationToken cancellationToken) =>
+        Ok(await _assignmentService.GetAllAssignmentsAsync(cancellationToken));
 
-    /// <summary>
-    /// Get assignments with pagination (Admin or Provider)
-    /// </summary>
-    /// <param name="pageNumber">Page number (default: 1)</param>
-    /// <param name="pageSize">Page size (default: 10, max: 100)</param>
-    /// <returns>Paginated list of assignments</returns>
+    /// <summary>Lists assignments with pagination (Admin or Provider).</summary>
     [HttpGet("paged")]
     [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
     public async Task<
         ActionResult<ApiResponse<PagedResult<InventoryAssignmentDto>>>
-    > GetAssignmentsPaged([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
-    {
-        try
-        {
-            if (pageSize > BusinessConstants.Pagination.MaxPageSize)
-                pageSize = BusinessConstants.Pagination.MaxPageSize;
+    > GetAssignmentsPaged(
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 10,
+        CancellationToken cancellationToken = default
+    ) => Ok(await _assignmentService.GetAssignmentsPagedAsync(pageNumber, pageSize, cancellationToken));
 
-            _logger.LogInformation(
-                "Requesting assignments page {PageNumber} with size {PageSize}",
-                pageNumber,
-                pageSize
-            );
-            var result = await _assignmentService.GetAssignmentsPagedAsync(pageNumber, pageSize);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving paged assignments");
-            return StatusCode(
-                500,
-                ApiResponse<PagedResult<InventoryAssignmentDto>>.Failure(
-                    "An error occurred while retrieving assignments"
-                )
-            );
-        }
-    }
-
-    /// <summary>
-    /// Get assignment by ID
-    /// </summary>
-    /// <param name="id">Assignment ID</param>
-    /// <returns>Assignment details</returns>
+    /// <summary>Gets an assignment by identifier (Admin/Provider, or the recipient).</summary>
     [HttpGet("{id:int}")]
-    public async Task<ActionResult<ApiResponse<InventoryAssignmentDto>>> GetAssignmentById(int id)
+    public async Task<ActionResult<ApiResponse<InventoryAssignmentDto>>> GetAssignmentById(
+        int id,
+        CancellationToken cancellationToken
+    )
     {
-        try
+        if (!TryGetCallerId(out var currentUserId))
         {
-            var currentUserIdClaim = User.FindFirst(AuthConstants.Claims.UserId)?.Value;
-            var isAdmin = User.FindFirst(AuthConstants.Claims.IsAdmin)?.Value == "True";
-            var isProvider = User.FindFirst(AuthConstants.Claims.IsProvider)?.Value == "True";
-
-            if (!int.TryParse(currentUserIdClaim, out int currentUserId))
-            {
-                return BadRequest(
-                    ApiResponse<InventoryAssignmentDto>.Failure("Invalid user ID in token")
-                );
-            }
-
-            _logger.LogInformation(
-                "User {UserId} requesting assignment {AssignmentId}",
-                currentUserId,
-                id
-            );
-            var result = await _assignmentService.GetAssignmentByIdAsync(id);
-
-            if (!result.IsSuccess)
-            {
-                return NotFound(result);
-            }
-
-            // Allow access if user is admin/provider or it's their own assignment
-            if (!isAdmin && !isProvider && result.Data!.UserId != currentUserId)
-            {
-                return Forbid();
-            }
-
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving assignment {AssignmentId}", id);
-            return StatusCode(
-                500,
-                ApiResponse<InventoryAssignmentDto>.Failure(
-                    "An error occurred while retrieving assignment"
-                )
+            return BadRequest(
+                ApiResponse<InventoryAssignmentDto>.Failure("Invalid user ID in token")
             );
         }
+
+        var result = await _assignmentService.GetAssignmentByIdAsync(id, cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return NotFound(result);
+        }
+
+        if (!IsAdminOrProvider() && result.Data!.UserId != currentUserId)
+        {
+            return Forbid();
+        }
+
+        return Ok(result);
     }
 
-    /// <summary>
-    /// Get assignments by user ID
-    /// </summary>
-    /// <param name="userId">User ID</param>
-    /// <returns>List of user's assignments</returns>
+    /// <summary>Lists a user's assignments (Admin/Provider, or the user themselves).</summary>
     [HttpGet("user/{userId:int}")]
     public async Task<
         ActionResult<ApiResponse<IEnumerable<InventoryAssignmentDto>>>
-    > GetAssignmentsByUserId(int userId)
+    > GetAssignmentsByUserId(int userId, CancellationToken cancellationToken)
     {
-        try
+        if (!TryGetCallerId(out var currentUserId))
         {
-            var currentUserIdClaim = User.FindFirst(AuthConstants.Claims.UserId)?.Value;
-            var isAdmin = User.FindFirst(AuthConstants.Claims.IsAdmin)?.Value == "True";
-            var isProvider = User.FindFirst(AuthConstants.Claims.IsProvider)?.Value == "True";
-
-            if (!int.TryParse(currentUserIdClaim, out int currentUserId))
-            {
-                return BadRequest(
-                    ApiResponse<IEnumerable<InventoryAssignmentDto>>.Failure(
-                        "Invalid user ID in token"
-                    )
-                );
-            }
-
-            // Allow access if user is admin/provider or requesting their own assignments
-            if (!isAdmin && !isProvider && currentUserId != userId)
-            {
-                return Forbid();
-            }
-
-            _logger.LogInformation("Requesting assignments for user {UserId}", userId);
-            var result = await _assignmentService.GetAssignmentsByUserIdAsync(userId);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving assignments for user {UserId}", userId);
-            return StatusCode(
-                500,
-                ApiResponse<IEnumerable<InventoryAssignmentDto>>.Failure(
-                    "An error occurred while retrieving user assignments"
-                )
+            return BadRequest(
+                ApiResponse<IEnumerable<InventoryAssignmentDto>>.Failure("Invalid user ID in token")
             );
         }
+
+        if (!IsAdminOrProvider() && currentUserId != userId)
+        {
+            return Forbid();
+        }
+
+        return Ok(await _assignmentService.GetAssignmentsByUserIdAsync(userId, cancellationToken));
     }
 
-    /// <summary>
-    /// Get current user's assignments
-    /// </summary>
-    /// <returns>List of current user's assignments</returns>
+    /// <summary>Lists the caller's own assignments.</summary>
     [HttpGet("my-assignments")]
     public async Task<
         ActionResult<ApiResponse<IEnumerable<InventoryAssignmentDto>>>
-    > GetMyAssignments()
+    > GetMyAssignments(CancellationToken cancellationToken)
     {
-        try
+        if (!TryGetCallerId(out var currentUserId))
         {
-            var currentUserIdClaim = User.FindFirst(AuthConstants.Claims.UserId)?.Value;
-            if (!int.TryParse(currentUserIdClaim, out int currentUserId))
-            {
-                return BadRequest(
-                    ApiResponse<IEnumerable<InventoryAssignmentDto>>.Failure(
-                        "Invalid user ID in token"
-                    )
-                );
-            }
-
-            _logger.LogInformation("User {UserId} requesting their assignments", currentUserId);
-            var result = await _assignmentService.GetAssignmentsByUserIdAsync(currentUserId);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving current user assignments");
-            return StatusCode(
-                500,
-                ApiResponse<IEnumerable<InventoryAssignmentDto>>.Failure(
-                    "An error occurred while retrieving your assignments"
-                )
+            return BadRequest(
+                ApiResponse<IEnumerable<InventoryAssignmentDto>>.Failure("Invalid user ID in token")
             );
         }
+
+        return Ok(
+            await _assignmentService.GetAssignmentsByUserIdAsync(currentUserId, cancellationToken)
+        );
     }
 
-    /// <summary>
-    /// Get active assignments (Admin or Provider)
-    /// </summary>
-    /// <returns>List of active assignments</returns>
+    /// <summary>Lists active assignments (Admin or Provider).</summary>
     [HttpGet("active")]
     [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
     public async Task<
         ActionResult<ApiResponse<IEnumerable<InventoryAssignmentDto>>>
-    > GetActiveAssignments()
-    {
-        try
-        {
-            _logger.LogInformation("Requesting active assignments");
-            var result = await _assignmentService.GetActiveAssignmentsAsync();
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving active assignments");
-            return StatusCode(
-                500,
-                ApiResponse<IEnumerable<InventoryAssignmentDto>>.Failure(
-                    "An error occurred while retrieving active assignments"
-                )
-            );
-        }
-    }
+    > GetActiveAssignments(CancellationToken cancellationToken) =>
+        Ok(await _assignmentService.GetActiveAssignmentsAsync(cancellationToken));
 
-    /// <summary>
-    /// Get active assignments for a specific user
-    /// </summary>
-    /// <param name="userId">User ID</param>
-    /// <returns>List of active assignments for the user</returns>
+    /// <summary>Lists a user's active assignments (Admin/Provider, or the user themselves).</summary>
     [HttpGet("active/user/{userId:int}")]
     public async Task<
         ActionResult<ApiResponse<IEnumerable<InventoryAssignmentDto>>>
-    > GetActiveAssignmentsByUserId(int userId)
+    > GetActiveAssignmentsByUserId(int userId, CancellationToken cancellationToken)
     {
-        try
+        if (!TryGetCallerId(out var currentUserId))
         {
-            var currentUserIdClaim = User.FindFirst(AuthConstants.Claims.UserId)?.Value;
-            var isAdmin = User.FindFirst(AuthConstants.Claims.IsAdmin)?.Value == "True";
-            var isProvider = User.FindFirst(AuthConstants.Claims.IsProvider)?.Value == "True";
-
-            if (!int.TryParse(currentUserIdClaim, out int currentUserId))
-            {
-                return BadRequest(
-                    ApiResponse<IEnumerable<InventoryAssignmentDto>>.Failure(
-                        "Invalid user ID in token"
-                    )
-                );
-            }
-
-            // Allow access if user is admin/provider or requesting their own active assignments
-            if (!isAdmin && !isProvider && currentUserId != userId)
-            {
-                return Forbid();
-            }
-
-            _logger.LogInformation("Requesting active assignments for user {UserId}", userId);
-            var result = await _assignmentService.GetActiveAssignmentsByUserIdAsync(userId);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving active assignments for user {UserId}", userId);
-            return StatusCode(
-                500,
-                ApiResponse<IEnumerable<InventoryAssignmentDto>>.Failure(
-                    "An error occurred while retrieving active assignments"
-                )
+            return BadRequest(
+                ApiResponse<IEnumerable<InventoryAssignmentDto>>.Failure("Invalid user ID in token")
             );
         }
+
+        if (!IsAdminOrProvider() && currentUserId != userId)
+        {
+            return Forbid();
+        }
+
+        return Ok(
+            await _assignmentService.GetActiveAssignmentsByUserIdAsync(userId, cancellationToken)
+        );
     }
 
-    /// <summary>
-    /// Get overdue assignments (Admin or Provider)
-    /// </summary>
-    /// <returns>List of overdue assignments</returns>
+    /// <summary>Lists overdue assignments (Admin or Provider).</summary>
     [HttpGet("overdue")]
     [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
     public async Task<
         ActionResult<ApiResponse<IEnumerable<InventoryAssignmentDto>>>
-    > GetOverdueAssignments()
-    {
-        try
-        {
-            _logger.LogInformation("Requesting overdue assignments");
-            var result = await _assignmentService.GetOverdueAssignmentsAsync();
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving overdue assignments");
-            return StatusCode(
-                500,
-                ApiResponse<IEnumerable<InventoryAssignmentDto>>.Failure(
-                    "An error occurred while retrieving overdue assignments"
-                )
-            );
-        }
-    }
+    > GetOverdueAssignments(CancellationToken cancellationToken) =>
+        Ok(await _assignmentService.GetOverdueAssignmentsAsync(cancellationToken));
 
-    /// <summary>
-    /// Get assignment history for an inventory item (Admin or Provider)
-    /// </summary>
-    /// <param name="inventoryId">Inventory ID</param>
-    /// <returns>Assignment history for the inventory item</returns>
+    /// <summary>Gets the assignment history for an inventory item (Admin or Provider).</summary>
     [HttpGet("history/inventory/{inventoryId:int}")]
     [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
     public async Task<ActionResult<ApiResponse<AssignmentHistoryDto>>> GetAssignmentHistory(
-        int inventoryId
+        int inventoryId,
+        CancellationToken cancellationToken
     )
     {
-        try
-        {
-            _logger.LogInformation(
-                "Requesting assignment history for inventory {InventoryId}",
-                inventoryId
-            );
-            var result = await _assignmentService.GetAssignmentHistoryAsync(inventoryId);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error retrieving assignment history for inventory {InventoryId}",
-                inventoryId
-            );
-            return StatusCode(
-                500,
-                ApiResponse<AssignmentHistoryDto>.Failure(
-                    "An error occurred while retrieving assignment history"
-                )
-            );
-        }
+        var result = await _assignmentService.GetAssignmentHistoryAsync(
+            inventoryId,
+            cancellationToken
+        );
+        return result.IsSuccess ? Ok(result) : NotFound(result);
     }
 
-    /// <summary>
-    /// Create new assignment (Admin or Provider)
-    /// </summary>
-    /// <param name="createAssignmentDto">Assignment creation data</param>
-    /// <returns>Created assignment details</returns>
+    /// <summary>Creates a new assignment (Admin or Provider).</summary>
     [HttpPost]
     [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
     public async Task<ActionResult<ApiResponse<InventoryAssignmentDto>>> CreateAssignment(
-        [FromBody] CreateInventoryAssignmentDto createAssignmentDto
+        [FromBody] CreateInventoryAssignmentDto createAssignmentDto,
+        CancellationToken cancellationToken
     )
     {
-        try
+        if (!TryGetCallerId(out var assignedByUserId))
         {
-            var userIdClaim = User.FindFirst(AuthConstants.Claims.UserId)?.Value;
-            if (
-                string.IsNullOrEmpty(userIdClaim)
-                || !int.TryParse(userIdClaim, out int assignedByUserId)
-            )
-            {
-                return BadRequest(ApiResponse<InventoryAssignmentDto>.Failure("Invalid user ID"));
-            }
-
-            _logger.LogInformation(
-                "User {AssignedByUserId} creating assignment for inventory {InventoryId} to user {UserId}",
-                assignedByUserId,
-                createAssignmentDto.InventoryId,
-                createAssignmentDto.UserId
-            );
-
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(
-                    ApiResponse<InventoryAssignmentDto>.Failure(
-                        "Invalid request data",
-                        ModelState
-                            .Values.SelectMany(v => v.Errors.Select(e => e.ErrorMessage))
-                            .ToList()
-                    )
-                );
-            }
-
-            var result = await _assignmentService.CreateAssignmentAsync(
-                createAssignmentDto,
-                assignedByUserId
-            );
-
-            if (!result.IsSuccess)
-            {
-                return BadRequest(result);
-            }
-
-            _logger.LogInformation(
-                "Successfully created assignment {AssignmentId}",
-                result.Data!.Id
-            );
-            return CreatedAtAction(nameof(GetAssignmentById), new { id = result.Data!.Id }, result);
+            return BadRequest(ApiResponse<InventoryAssignmentDto>.Failure("Invalid user ID"));
         }
-        catch (Exception ex)
+
+        var result = await _assignmentService.CreateAssignmentAsync(
+            createAssignmentDto,
+            assignedByUserId,
+            cancellationToken
+        );
+        if (!result.IsSuccess)
         {
-            _logger.LogError(ex, "Error creating assignment");
-            return StatusCode(
-                500,
-                ApiResponse<InventoryAssignmentDto>.Failure(
-                    "An error occurred while creating assignment"
-                )
-            );
+            return BadRequest(result);
         }
+
+        return CreatedAtAction(nameof(GetAssignmentById), new { id = result.Data!.Id }, result);
     }
 
-    /// <summary>
-    /// Update assignment (Admin or Provider)
-    /// </summary>
-    /// <param name="id">Assignment ID</param>
-    /// <param name="updateAssignmentDto">Assignment update data</param>
-    /// <returns>Updated assignment details</returns>
+    /// <summary>Updates an active assignment (Admin or Provider).</summary>
     [HttpPut("{id:int}")]
     [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
     public async Task<ActionResult<ApiResponse<InventoryAssignmentDto>>> UpdateAssignment(
         int id,
-        [FromBody] UpdateInventoryAssignmentDto updateAssignmentDto
+        [FromBody] UpdateInventoryAssignmentDto updateAssignmentDto,
+        CancellationToken cancellationToken
     )
     {
-        try
-        {
-            _logger.LogInformation("Updating assignment {AssignmentId}", id);
-
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(
-                    ApiResponse<InventoryAssignmentDto>.Failure(
-                        "Invalid request data",
-                        ModelState
-                            .Values.SelectMany(v => v.Errors.Select(e => e.ErrorMessage))
-                            .ToList()
-                    )
-                );
-            }
-
-            var result = await _assignmentService.UpdateAssignmentAsync(id, updateAssignmentDto);
-
-            if (!result.IsSuccess)
-            {
-                return BadRequest(result);
-            }
-
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating assignment {AssignmentId}", id);
-            return StatusCode(
-                500,
-                ApiResponse<InventoryAssignmentDto>.Failure(
-                    "An error occurred while updating assignment"
-                )
-            );
-        }
+        var result = await _assignmentService.UpdateAssignmentAsync(
+            id,
+            updateAssignmentDto,
+            cancellationToken
+        );
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
 
-    /// <summary>
-    /// Return assignment (Admin or Provider)
-    /// </summary>
-    /// <param name="returnAssignmentDto">Return assignment data</param>
-    /// <returns>Success status</returns>
+    /// <summary>Processes a return (Admin or Provider).</summary>
     [HttpPost("return")]
     [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
     public async Task<ActionResult<ApiResponse<bool>>> ReturnAssignment(
-        [FromBody] ReturnInventoryAssignmentDto returnAssignmentDto
+        [FromBody] ReturnInventoryAssignmentDto returnAssignmentDto,
+        CancellationToken cancellationToken
     )
     {
-        try
+        if (!TryGetCallerId(out var returnedToUserId))
         {
-            var userIdClaim = User.FindFirst(AuthConstants.Claims.UserId)?.Value;
-            if (
-                string.IsNullOrEmpty(userIdClaim)
-                || !int.TryParse(userIdClaim, out int returnedToUserId)
-            )
-            {
-                return BadRequest(ApiResponse<bool>.Failure("Invalid user ID"));
-            }
-
-            _logger.LogInformation(
-                "User {ReturnedToUserId} processing return for assignment {AssignmentId}",
-                returnedToUserId,
-                returnAssignmentDto.AssignmentId
-            );
-
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(
-                    ApiResponse<bool>.Failure(
-                        "Invalid request data",
-                        ModelState
-                            .Values.SelectMany(v => v.Errors.Select(e => e.ErrorMessage))
-                            .ToList()
-                    )
-                );
-            }
-
-            var result = await _assignmentService.ReturnAssignmentAsync(
-                returnAssignmentDto,
-                returnedToUserId
-            );
-
-            if (!result.IsSuccess)
-            {
-                return BadRequest(result);
-            }
-
-            _logger.LogInformation(
-                "Successfully processed return for assignment {AssignmentId}",
-                returnAssignmentDto.AssignmentId
-            );
-            return Ok(result);
+            return BadRequest(ApiResponse<bool>.Failure("Invalid user ID"));
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error processing assignment return");
-            return StatusCode(
-                500,
-                ApiResponse<bool>.Failure("An error occurred while processing assignment return")
-            );
-        }
+
+        var result = await _assignmentService.ReturnAssignmentAsync(
+            returnAssignmentDto,
+            returnedToUserId,
+            cancellationToken
+        );
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
+
+    private bool TryGetCallerId(out int userId) =>
+        int.TryParse(User.FindFirst(AuthConstants.Claims.UserId)?.Value, out userId);
+
+    private bool IsAdminOrProvider() =>
+        User.FindFirst(AuthConstants.Claims.IsAdmin)?.Value == "True"
+        || User.FindFirst(AuthConstants.Claims.IsProvider)?.Value == "True";
 }

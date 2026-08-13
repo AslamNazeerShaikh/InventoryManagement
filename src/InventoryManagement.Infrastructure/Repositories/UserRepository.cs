@@ -1,74 +1,69 @@
 using InventoryManagement.Domain.Entities;
-using InventoryManagement.Domain.Enums;
 using InventoryManagement.Domain.Interfaces;
 using InventoryManagement.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace InventoryManagement.Infrastructure.Repositories;
 
+/// <summary>EF Core repository for <see cref="User"/> with authentication-oriented queries.</summary>
 public class UserRepository : GenericRepository<User>, IUserRepository
 {
-    private readonly AppDbContext _appDbContext;
-
+    /// <summary>Creates the repository.</summary>
     public UserRepository(AppDbContext appDbContext)
-        : base(appDbContext)
-    {
-        _appDbContext = appDbContext;
-    }
+        : base(appDbContext) { }
 
-    public async Task<User?> GetByEmailAsync(string email)
-    {
-        return await _appDbContext.Users.FirstOrDefaultAsync(x => x.Email == email)
-            ?? throw new ArgumentNullException();
-    }
+    /// <inheritdoc />
+    public async Task<User?> GetByEmailAsync(
+        string email,
+        CancellationToken cancellationToken = default
+    ) =>
+        await EntitySet
+            .FirstOrDefaultAsync(x => x.Email == email, cancellationToken)
+            .ConfigureAwait(false);
 
-    public async Task<User?> GetByEmailWithRolesAsync(string email)
-    {
-        return await _appDbContext.Users.FirstOrDefaultAsync(x => x.Email == email && x.IsActive);
-    }
+    /// <inheritdoc />
+    public async Task<bool> IsEmailExistsAsync(
+        string email,
+        CancellationToken cancellationToken = default
+    ) => await EntitySet.AnyAsync(x => x.Email == email, cancellationToken).ConfigureAwait(false);
 
-    public async Task<bool> IsEmailExistsAsync(string email)
-    {
-        return await _appDbContext.Users.AnyAsync(x => x.Email == email);
-    }
+    /// <inheritdoc />
+    public async Task<User?> GetByActiveRefreshTokenHashAsync(
+        string refreshTokenHash,
+        DateTime nowUtc,
+        CancellationToken cancellationToken = default
+    ) =>
+        // Tracked (not AsNoTracking): the caller rotates the token and persists the same instance.
+        await EntitySet
+            .FirstOrDefaultAsync(
+                x =>
+                    x.RefreshToken == refreshTokenHash
+                    && x.RefreshTokenExpiryTime != null
+                    && x.RefreshTokenExpiryTime > nowUtc
+                    && x.IsActive,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
 
-    public async Task<IEnumerable<User>> GetNursePractitionersAsync()
-    {
-        return await _appDbContext
-            .Users.Where(x => x.Role == UserRole.NursePractitioner && x.IsActive)
-            .ToListAsync();
-    }
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<User>> GetNursePractitionersAsync(
+        CancellationToken cancellationToken = default
+    ) =>
+        await EntitySet
+            .AsNoTracking()
+            .Where(x => x.Role == Domain.Enums.UserRole.NursePractitioner && x.IsActive)
+            .OrderBy(x => x.Name)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 
-    public async Task<IEnumerable<User>> GetActiveUsersAsync()
-    {
-        return await _appDbContext.Users.Where(x => x.IsActive).OrderBy(x => x.Name).ToListAsync();
-    }
-
-    public async Task<User?> ValidateUserCredentialsAsync(string email, string passwordHash)
-    {
-        return await _appDbContext.Users.FirstOrDefaultAsync(x =>
-            x.Email == email && x.PasswordHash == passwordHash && x.IsActive
-        );
-    }
-
-    public async Task UpdateLastLoginAsync(int userId, DateTime lastLoginTime)
-    {
-        var user = await _appDbContext.Users.FindAsync(userId);
-        if (user != null)
-        {
-            user.LastLoginAt = lastLoginTime;
-            _appDbContext.Users.Update(user);
-        }
-    }
-
-    public async Task UpdateRefreshTokenAsync(int userId, string refreshToken, DateTime expiryTime)
-    {
-        var user = await _appDbContext.Users.FindAsync(userId);
-        if (user != null)
-        {
-            user.RefreshToken = refreshToken;
-            user.RefreshTokenExpiryTime = expiryTime;
-            _appDbContext.Users.Update(user);
-        }
-    }
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<User>> GetActiveUsersAsync(
+        CancellationToken cancellationToken = default
+    ) =>
+        await EntitySet
+            .AsNoTracking()
+            .Where(x => x.IsActive)
+            .OrderBy(x => x.Name)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 }

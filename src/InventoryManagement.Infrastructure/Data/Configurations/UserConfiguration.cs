@@ -4,8 +4,10 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace InventoryManagement.Infrastructure.Data.Configurations;
 
+/// <summary>EF Core mapping for <see cref="User"/>: constraints, indexes, relationships and soft-delete filter.</summary>
 public class UserConfiguration : IEntityTypeConfiguration<User>
 {
+    /// <inheritdoc />
     public void Configure(EntityTypeBuilder<User> builder)
     {
         builder.ToTable("Users");

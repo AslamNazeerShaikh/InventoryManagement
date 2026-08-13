@@ -15,19 +15,32 @@ namespace InventoryManagement.Infrastructure.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "10.0.8");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.11");
 
             modelBuilder.Entity("InventoryManagement.Domain.Entities.IdempotentRequest", b =>
                 {
                     b.Property<string>("IdempotencyKey")
-                        .HasMaxLength(100)
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<bool>("IsCompleted")
                         .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("LockExpiresAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RequestHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("RequestMethod")
                         .IsRequired()
@@ -40,6 +53,7 @@ namespace InventoryManagement.Infrastructure.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ResponseBody")
+                        .HasMaxLength(1048576)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ResponseContentType")
@@ -51,8 +65,11 @@ namespace InventoryManagement.Infrastructure.Migrations
 
                     b.HasKey("IdempotencyKey");
 
-                    b.HasIndex("CreatedAt")
-                        .HasDatabaseName("IX_IdempotentRequests_CreatedAt");
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("IX_IdempotentRequests_ExpiresAt");
+
+                    b.HasIndex("LockExpiresAt")
+                        .HasDatabaseName("IX_IdempotentRequests_LockExpiresAt");
 
                     b.ToTable("IdempotentRequests", (string)null);
                 });
@@ -76,6 +93,10 @@ namespace InventoryManagement.Infrastructure.Migrations
 
                     b.Property<string>("Category")
                         .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ConcurrencyToken")
+                        .IsConcurrencyToken()
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAt")
@@ -206,6 +227,10 @@ namespace InventoryManagement.Infrastructure.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("ConcurrencyToken")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
@@ -289,6 +314,10 @@ namespace InventoryManagement.Infrastructure.Migrations
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("ConcurrencyToken")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");

@@ -4,8 +4,10 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace InventoryManagement.Infrastructure.Data.Configurations;
 
+/// <summary>EF Core mapping for <see cref="InventoryAssignment"/>: constraints, indexes, relationships and soft-delete filter.</summary>
 public class InventoryAssignmentConfiguration : IEntityTypeConfiguration<InventoryAssignment>
 {
+    /// <inheritdoc />
     public void Configure(EntityTypeBuilder<InventoryAssignment> builder)
     {
         builder.ToTable("InventoryAssignments");

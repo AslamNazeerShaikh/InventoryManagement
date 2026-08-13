@@ -1,60 +1,97 @@
+using InventoryManagement.Domain.Common;
 using InventoryManagement.Domain.Entities;
+using InventoryManagement.Domain.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace InventoryManagement.Infrastructure.Data;
 
+/// <summary>
+/// Entity Framework Core database context for the inventory system. Applies entity configurations,
+/// enforces optimistic concurrency via a rotating <see cref="BaseEntity.ConcurrencyToken"/>, and
+/// centralizes auditing timestamps on save.
+/// </summary>
 public class AppDbContext : DbContext
 {
+    private readonly IDateTimeProvider? _clock;
+
+    /// <summary>Creates the context with the supplied options (design-time / testing).</summary>
     public AppDbContext(DbContextOptions<AppDbContext> options)
         : base(options) { }
 
-    public DbSet<User> Users { get; set; }
-    public DbSet<Inventory> Inventories { get; set; }
-    public DbSet<InventoryAssignment> InventoryAssignments { get; set; }
-    public DbSet<IdempotentRequest> IdempotentRequests { get; set; }
+    /// <summary>Creates the context with an injected clock for deterministic audit timestamps.</summary>
+    public AppDbContext(DbContextOptions<AppDbContext> options, IDateTimeProvider clock)
+        : base(options)
+    {
+        _clock = clock;
+    }
 
+    /// <summary>Users table.</summary>
+    public DbSet<User> Users => Set<User>();
+
+    /// <summary>Inventory items table.</summary>
+    public DbSet<Inventory> Inventories => Set<Inventory>();
+
+    /// <summary>Inventory assignments table.</summary>
+    public DbSet<InventoryAssignment> InventoryAssignments => Set<InventoryAssignment>();
+
+    /// <summary>Idempotency records table.</summary>
+    public DbSet<IdempotentRequest> IdempotentRequests => Set<IdempotentRequest>();
+
+    /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-        // Apply all configurations from the current assembly
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
+
+        // Provider-agnostic optimistic concurrency: mark every BaseEntity.ConcurrencyToken as a
+        // concurrency token so EF includes it in UPDATE/DELETE predicates.
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            if (typeof(BaseEntity).IsAssignableFrom(entityType.ClrType))
+            {
+                modelBuilder
+                    .Entity(entityType.ClrType)
+                    .Property(nameof(BaseEntity.ConcurrencyToken))
+                    .IsConcurrencyToken();
+            }
+        }
     }
 
-    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    /// <inheritdoc />
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        // Update auditing fields before saving
-        UpdateAuditFields();
-        return await base.SaveChangesAsync(cancellationToken);
+        ApplyAuditAndConcurrency();
+        return base.SaveChangesAsync(cancellationToken);
     }
 
+    /// <inheritdoc />
     public override int SaveChanges()
     {
-        // Update auditing fields before saving
-        UpdateAuditFields();
+        ApplyAuditAndConcurrency();
         return base.SaveChanges();
     }
 
-    private void UpdateAuditFields()
+    /// <summary>
+    /// Stamps audit timestamps and rotates the concurrency token for added/modified entities so a
+    /// concurrent writer that read the previous token fails its conditional update.
+    /// </summary>
+    private void ApplyAuditAndConcurrency()
     {
-        var entries = ChangeTracker
-            .Entries()
-            .Where(e =>
-                e.Entity is Domain.Common.BaseEntity
-                && (e.State == EntityState.Added || e.State == EntityState.Modified)
-            );
+        var now = _clock?.UtcNow ?? DateTime.UtcNow;
 
-        foreach (var entityEntry in entries)
+        foreach (var entry in ChangeTracker.Entries<BaseEntity>())
         {
-            var entity = (Domain.Common.BaseEntity)entityEntry.Entity;
-
-            if (entityEntry.State == EntityState.Added)
+            switch (entry.State)
             {
-                entity.CreatedAt = DateTime.UtcNow;
-            }
-            else if (entityEntry.State == EntityState.Modified)
-            {
-                entity.UpdatedAt = DateTime.UtcNow;
+                case EntityState.Added:
+                    entry.Entity.CreatedAt = now;
+                    entry.Entity.ConcurrencyToken = Guid.NewGuid();
+                    break;
+                case EntityState.Modified:
+                    entry.Entity.UpdatedAt = now;
+                    entry.Entity.ConcurrencyToken = Guid.NewGuid();
+                    break;
             }
         }
     }
