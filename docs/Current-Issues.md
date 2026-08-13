@@ -1,5 +1,3 @@
----
-
 # InventoryManagement — Architecture, Security & Code-Quality Review
 
 ## 🔴 CRITICAL — Broken auth (functional + security)
