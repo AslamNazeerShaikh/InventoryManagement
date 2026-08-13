@@ -1,4 +1,4 @@
-﻿<Solution>
+<Solution>
   <Configurations>
     <Platform Name="Any CPU" />
     <Platform Name="x64" />
@@ -12,34 +12,25 @@
     <File Path="docs\README.md" />
   </Folder>
   <Folder Name="/src/">
-    <Project Path="src\InventoryManagement.API\InventoryManagement.API.csproj" Type="Classic C#">
+    <Project Path="src\InventoryManagement.API\InventoryManagement.API.csproj" Type="C#">
       <Configuration Solution="Debug|x64" Project="Debug|Any CPU" />
       <Configuration Solution="Debug|x86" Project="Debug|Any CPU" />
       <Configuration Solution="Release|x64" Project="Release|Any CPU" />
       <Configuration Solution="Release|x86" Project="Release|Any CPU" />
     </Project>
-    <Project
-      Path="src\InventoryManagement.Application\InventoryManagement.Application.csproj"
-      Type="Classic C#"
-    >
+    <Project Path="src\InventoryManagement.Application\InventoryManagement.Application.csproj" Type="C#">
       <Configuration Solution="Debug|x64" Project="Debug|Any CPU" />
       <Configuration Solution="Debug|x86" Project="Debug|Any CPU" />
       <Configuration Solution="Release|x64" Project="Release|Any CPU" />
       <Configuration Solution="Release|x86" Project="Release|Any CPU" />
     </Project>
-    <Project
-      Path="src\InventoryManagement.Domain\InventoryManagement.Domain.csproj"
-      Type="Classic C#"
-    >
+    <Project Path="src\InventoryManagement.Domain\InventoryManagement.Domain.csproj" Type="C#">
       <Configuration Solution="Debug|x64" Project="Debug|Any CPU" />
       <Configuration Solution="Debug|x86" Project="Debug|Any CPU" />
       <Configuration Solution="Release|x64" Project="Release|Any CPU" />
       <Configuration Solution="Release|x86" Project="Release|Any CPU" />
     </Project>
-    <Project
-      Path="src\InventoryManagement.Infrastructure\InventoryManagement.Infrastructure.csproj"
-      Type="Classic C#"
-    >
+    <Project Path="src\InventoryManagement.Infrastructure\InventoryManagement.Infrastructure.csproj" Type="C#">
       <Configuration Solution="Debug|x64" Project="Debug|Any CPU" />
       <Configuration Solution="Debug|x86" Project="Debug|Any CPU" />
       <Configuration Solution="Release|x64" Project="Release|Any CPU" />
@@ -47,10 +38,10 @@
     </Project>
   </Folder>
   <Folder Name="/tests/">
-    <Project
-      Path="tests\InventoryManagement.Application.Tests\InventoryManagement.Application.Tests.csproj"
-      Type="Classic C#"
-    >
+    <Project Path="tests/InventoryManagement.API.Tests/InventoryManagement.API.Tests.csproj" />
+    <Project Path="tests/InventoryManagement.Domain.Tests/InventoryManagement.Domain.Tests.csproj" />
+    <Project Path="tests/InventoryManagement.Infrastructure.Tests/InventoryManagement.Infrastructure.Tests.csproj" />
+    <Project Path="tests\InventoryManagement.Application.Tests\InventoryManagement.Application.Tests.csproj" Type="C#">
       <Configuration Solution="Debug|x64" Project="Debug|Any CPU" />
       <Configuration Solution="Debug|x86" Project="Debug|Any CPU" />
       <Configuration Solution="Release|x64" Project="Release|Any CPU" />
