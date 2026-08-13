@@ -1,3 +1,4 @@
+using InventoryManagement.API.Infrastructure;
 using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.DTOs;
 using InventoryManagement.Domain.Interfaces;
@@ -12,7 +13,7 @@ namespace InventoryManagement.API.Controllers;
 [Route("api/[controller]")]
 [Produces("application/json")]
 [Authorize(Policy = AuthConstants.Policies.AllRoles)]
-public class UsersController : ControllerBase
+public class UsersController : ApiControllerBase
 {
     private readonly IUserService _userService;
     private readonly ILogger<UsersController> _logger;
@@ -29,7 +30,7 @@ public class UsersController : ControllerBase
     [Authorize(Policy = AuthConstants.Policies.AdminOnly)]
     public async Task<ActionResult<ApiResponse<IEnumerable<UserDto>>>> GetAllUsers(
         CancellationToken cancellationToken
-    ) => Ok(await _userService.GetAllUsersAsync(cancellationToken));
+    ) => HandleResult(await _userService.GetAllUsersAsync(cancellationToken));
 
     /// <summary>Lists users with pagination (Admin only).</summary>
     [HttpGet("paged")]
@@ -38,7 +39,7 @@ public class UsersController : ControllerBase
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 10,
         CancellationToken cancellationToken = default
-    ) => Ok(await _userService.GetUsersPagedAsync(pageNumber, pageSize, cancellationToken));
+    ) => HandleResult(await _userService.GetUsersPagedAsync(pageNumber, pageSize, cancellationToken));
 
     /// <summary>Gets a user by identifier (Admin, or the caller's own profile).</summary>
     [HttpGet("{id:int}")]
@@ -57,8 +58,7 @@ public class UsersController : ControllerBase
             return Forbid();
         }
 
-        var result = await _userService.GetUserByIdAsync(id, cancellationToken);
-        return result.IsSuccess ? Ok(result) : NotFound(result);
+        return HandleResult(await _userService.GetUserByIdAsync(id, cancellationToken));
     }
 
     /// <summary>Gets a user by email (Admin only).</summary>
@@ -67,11 +67,7 @@ public class UsersController : ControllerBase
     public async Task<ActionResult<ApiResponse<UserDto>>> GetUserByEmail(
         string email,
         CancellationToken cancellationToken
-    )
-    {
-        var result = await _userService.GetUserByEmailAsync(email, cancellationToken);
-        return result.IsSuccess ? Ok(result) : NotFound(result);
-    }
+    ) => HandleResult(await _userService.GetUserByEmailAsync(email, cancellationToken));
 
     /// <summary>Creates a new user (Admin only).</summary>
     [HttpPost]
@@ -82,12 +78,15 @@ public class UsersController : ControllerBase
     )
     {
         var result = await _userService.CreateUserAsync(createUserDto, cancellationToken);
-        if (!result.IsSuccess)
-        {
-            return BadRequest(result);
-        }
-
-        return CreatedAtAction(nameof(GetUserById), new { id = result.Data!.Id }, result);
+        return HandleResult(
+            result,
+            (value, message) =>
+                CreatedAtAction(
+                    nameof(GetUserById),
+                    new { id = value.Id },
+                    ApiResponse<UserDto>.Success(value, message)
+                )
+        );
     }
 
     /// <summary>Updates a user (Admin, or the caller's own profile without privilege escalation).</summary>
@@ -113,16 +112,15 @@ public class UsersController : ControllerBase
         if (!isAdmin)
         {
             var current = await _userService.GetUserByIdAsync(id, cancellationToken);
-            if (current is { IsSuccess: true, Data: not null })
+            if (current is { IsSuccess: true, Value: not null })
             {
-                updateUserDto.Role = current.Data.Role;
-                updateUserDto.IsAdmin = current.Data.IsAdmin;
-                updateUserDto.IsProvider = current.Data.IsProvider;
+                updateUserDto.Role = current.Value.Role;
+                updateUserDto.IsAdmin = current.Value.IsAdmin;
+                updateUserDto.IsProvider = current.Value.IsProvider;
             }
         }
 
-        var result = await _userService.UpdateUserAsync(id, updateUserDto, cancellationToken);
-        return result.IsSuccess ? Ok(result) : BadRequest(result);
+        return HandleResult(await _userService.UpdateUserAsync(id, updateUserDto, cancellationToken));
     }
 
     /// <summary>Deletes a user (Admin only; cannot delete self).</summary>
@@ -138,8 +136,7 @@ public class UsersController : ControllerBase
             return BadRequest(ApiResponse<bool>.Failure("Cannot delete your own account"));
         }
 
-        var result = await _userService.DeleteUserAsync(id, cancellationToken);
-        return result.IsSuccess ? Ok(result) : BadRequest(result);
+        return HandleResult(await _userService.DeleteUserAsync(id, cancellationToken));
     }
 
     /// <summary>Lists nurse-practitioner users (Admin or Provider).</summary>
@@ -147,14 +144,14 @@ public class UsersController : ControllerBase
     [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
     public async Task<ActionResult<ApiResponse<IEnumerable<UserDto>>>> GetNursePractitioners(
         CancellationToken cancellationToken
-    ) => Ok(await _userService.GetNursePractitionersAsync(cancellationToken));
+    ) => HandleResult(await _userService.GetNursePractitionersAsync(cancellationToken));
 
     /// <summary>Lists active users (Admin or Provider).</summary>
     [HttpGet("active")]
     [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
     public async Task<ActionResult<ApiResponse<IEnumerable<UserDto>>>> GetActiveUsers(
         CancellationToken cancellationToken
-    ) => Ok(await _userService.GetActiveUsersAsync(cancellationToken));
+    ) => HandleResult(await _userService.GetActiveUsersAsync(cancellationToken));
 
     private bool TryGetCallerId(out int userId) =>
         int.TryParse(User.FindFirst(AuthConstants.Claims.UserId)?.Value, out userId);

@@ -1,3 +1,4 @@
+using InventoryManagement.API.Infrastructure;
 using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.DTOs;
 using InventoryManagement.Domain.Interfaces;
@@ -6,13 +7,13 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace InventoryManagement.API.Controllers;
 
-/// <summary>Inventory catalogue endpoints. Reads are available to all authenticated roles; writes
-/// require elevated roles. Unhandled faults are converted by the global exception handler.</summary>
+/// <summary>Inventory catalogue endpoints. Services return <c>Result&lt;T&gt;</c>; the base controller
+/// maps it to the correct HTTP status while keeping the <c>ApiResponse&lt;T&gt;</c> body.</summary>
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
 [Authorize(Policy = AuthConstants.Policies.AllRoles)]
-public class InventoryController : ControllerBase
+public class InventoryController : ApiControllerBase
 {
     private readonly IInventoryService _inventoryService;
     private readonly ILogger<InventoryController> _logger;
@@ -31,24 +32,17 @@ public class InventoryController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<ApiResponse<IEnumerable<InventoryDto>>>> GetAllInventories(
         CancellationToken cancellationToken
-    ) => Ok(await _inventoryService.GetAllInventoriesAsync(cancellationToken));
+    ) => HandleResult(await _inventoryService.GetAllInventoriesAsync(cancellationToken));
 
     /// <summary>Gets a deterministic page of inventory items.</summary>
-    /// <param name="pageNumber">1-based page number.</param>
-    /// <param name="pageSize">Page size (max enforced server-side).</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     [HttpGet("paged")]
     public async Task<ActionResult<ApiResponse<PagedResult<InventoryDto>>>> GetInventoriesPaged(
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 10,
         CancellationToken cancellationToken = default
     ) =>
-        Ok(
-            await _inventoryService.GetInventoriesPagedAsync(
-                pageNumber,
-                pageSize,
-                cancellationToken
-            )
+        HandleResult(
+            await _inventoryService.GetInventoriesPagedAsync(pageNumber, pageSize, cancellationToken)
         );
 
     /// <summary>Gets an inventory item by identifier.</summary>
@@ -56,35 +50,27 @@ public class InventoryController : ControllerBase
     public async Task<ActionResult<ApiResponse<InventoryDto>>> GetInventoryById(
         int id,
         CancellationToken cancellationToken
-    )
-    {
-        var result = await _inventoryService.GetInventoryByIdAsync(id, cancellationToken);
-        return result.IsSuccess ? Ok(result) : NotFound(result);
-    }
+    ) => HandleResult(await _inventoryService.GetInventoryByIdAsync(id, cancellationToken));
 
     /// <summary>Gets an inventory item by barcode.</summary>
     [HttpGet("barcode/{barcode}")]
     public async Task<ActionResult<ApiResponse<InventoryDto>>> GetInventoryByBarcode(
         string barcode,
         CancellationToken cancellationToken
-    )
-    {
-        var result = await _inventoryService.GetInventoryByBarcodeAsync(barcode, cancellationToken);
-        return result.IsSuccess ? Ok(result) : NotFound(result);
-    }
+    ) => HandleResult(await _inventoryService.GetInventoryByBarcodeAsync(barcode, cancellationToken));
 
     /// <summary>Searches inventory items using the supplied criteria.</summary>
     [HttpPost("search")]
     public async Task<ActionResult<ApiResponse<IEnumerable<InventoryDto>>>> SearchInventories(
         [FromBody] InventorySearchDto searchDto,
         CancellationToken cancellationToken
-    ) => Ok(await _inventoryService.SearchInventoriesAsync(searchDto, cancellationToken));
+    ) => HandleResult(await _inventoryService.SearchInventoriesAsync(searchDto, cancellationToken));
 
     /// <summary>Gets available inventory items with remaining stock.</summary>
     [HttpGet("available")]
     public async Task<ActionResult<ApiResponse<IEnumerable<InventoryDto>>>> GetAvailableInventories(
         CancellationToken cancellationToken
-    ) => Ok(await _inventoryService.GetAvailableInventoriesAsync(cancellationToken));
+    ) => HandleResult(await _inventoryService.GetAvailableInventoriesAsync(cancellationToken));
 
     /// <summary>Gets inventory items expiring within the given number of months (clamped 3–6).</summary>
     [HttpGet("expiring")]
@@ -98,7 +84,7 @@ public class InventoryController : ControllerBase
             BusinessConstants.ExpiryAlert.MinMonthsBefore,
             BusinessConstants.ExpiryAlert.MaxMonthsBefore
         );
-        return Ok(
+        return HandleResult(
             await _inventoryService.GetExpiringInventoriesAsync(monthsBefore, cancellationToken)
         );
     }
@@ -108,14 +94,19 @@ public class InventoryController : ControllerBase
     public async Task<ActionResult<ApiResponse<IEnumerable<InventoryDto>>>> GetLowStockInventories(
         [FromQuery] int threshold = BusinessConstants.Inventory.LowStockThreshold,
         CancellationToken cancellationToken = default
-    ) => Ok(await _inventoryService.GetLowStockInventoriesAsync(threshold, cancellationToken));
+    ) =>
+        HandleResult(
+            await _inventoryService.GetLowStockInventoriesAsync(threshold, cancellationToken)
+        );
 
     /// <summary>Gets inventory items in a category.</summary>
     [HttpGet("category/{category}")]
     public async Task<
         ActionResult<ApiResponse<IEnumerable<InventoryDto>>>
     > GetInventoriesByCategory(string category, CancellationToken cancellationToken) =>
-        Ok(await _inventoryService.GetInventoriesByCategoryAsync(category, cancellationToken));
+        HandleResult(
+            await _inventoryService.GetInventoriesByCategoryAsync(category, cancellationToken)
+        );
 
     /// <summary>Creates a new inventory item (Admin or Provider).</summary>
     [HttpPost]
@@ -135,12 +126,15 @@ public class InventoryController : ControllerBase
             userId,
             cancellationToken
         );
-        if (!result.IsSuccess)
-        {
-            return BadRequest(result);
-        }
-
-        return CreatedAtAction(nameof(GetInventoryById), new { id = result.Data!.Id }, result);
+        return HandleResult(
+            result,
+            (value, message) =>
+                CreatedAtAction(
+                    nameof(GetInventoryById),
+                    new { id = value.Id },
+                    ApiResponse<InventoryDto>.Success(value, message)
+                )
+        );
     }
 
     /// <summary>Updates an inventory item (Admin or Provider).</summary>
@@ -150,15 +144,10 @@ public class InventoryController : ControllerBase
         int id,
         [FromBody] UpdateInventoryDto updateInventoryDto,
         CancellationToken cancellationToken
-    )
-    {
-        var result = await _inventoryService.UpdateInventoryAsync(
-            id,
-            updateInventoryDto,
-            cancellationToken
+    ) =>
+        HandleResult(
+            await _inventoryService.UpdateInventoryAsync(id, updateInventoryDto, cancellationToken)
         );
-        return result.IsSuccess ? Ok(result) : BadRequest(result);
-    }
 
     /// <summary>Deletes an inventory item (Admin only).</summary>
     [HttpDelete("{id:int}")]
@@ -166,9 +155,5 @@ public class InventoryController : ControllerBase
     public async Task<ActionResult<ApiResponse<bool>>> DeleteInventory(
         int id,
         CancellationToken cancellationToken
-    )
-    {
-        var result = await _inventoryService.DeleteInventoryAsync(id, cancellationToken);
-        return result.IsSuccess ? Ok(result) : BadRequest(result);
-    }
+    ) => HandleResult(await _inventoryService.DeleteInventoryAsync(id, cancellationToken));
 }

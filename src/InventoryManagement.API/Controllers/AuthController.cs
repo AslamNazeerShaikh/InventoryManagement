@@ -12,7 +12,7 @@ namespace InventoryManagement.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
-public class AuthController : ControllerBase
+public class AuthController : ApiControllerBase
 {
     private readonly IAuthService _authService;
     private readonly ILogger<AuthController> _logger;
@@ -33,11 +33,7 @@ public class AuthController : ControllerBase
     public async Task<ActionResult<ApiResponse<AuthResponseDto>>> Login(
         [FromBody] LoginDto loginDto,
         CancellationToken cancellationToken
-    )
-    {
-        var result = await _authService.LoginAsync(loginDto, cancellationToken);
-        return result.IsSuccess ? Ok(result) : Unauthorized(result);
-    }
+    ) => HandleResult(await _authService.LoginAsync(loginDto, cancellationToken));
 
     /// <summary>Exchanges a valid refresh token for a new token pair.</summary>
     /// <param name="refreshTokenDto">The refresh token.</param>
@@ -48,11 +44,7 @@ public class AuthController : ControllerBase
     public async Task<ActionResult<ApiResponse<AuthResponseDto>>> RefreshToken(
         [FromBody] RefreshTokenDto refreshTokenDto,
         CancellationToken cancellationToken
-    )
-    {
-        var result = await _authService.RefreshTokenAsync(refreshTokenDto, cancellationToken);
-        return result.IsSuccess ? Ok(result) : Unauthorized(result);
-    }
+    ) => HandleResult(await _authService.RefreshTokenAsync(refreshTokenDto, cancellationToken));
 
     /// <summary>Revokes the current user's refresh token.</summary>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -65,8 +57,7 @@ public class AuthController : ControllerBase
             return BadRequest(ApiResponse<bool>.Failure("Invalid user ID"));
         }
 
-        var result = await _authService.LogoutAsync(userId, cancellationToken);
-        return result.IsSuccess ? Ok(result) : BadRequest(result);
+        return HandleResult(await _authService.LogoutAsync(userId, cancellationToken));
     }
 
     /// <summary>Changes the current user's password and revokes existing refresh tokens.</summary>
@@ -84,12 +75,9 @@ public class AuthController : ControllerBase
             return BadRequest(ApiResponse<bool>.Failure("Invalid user ID"));
         }
 
-        var result = await _authService.ChangePasswordAsync(
-            userId,
-            changePasswordDto,
-            cancellationToken
+        return HandleResult(
+            await _authService.ChangePasswordAsync(userId, changePasswordDto, cancellationToken)
         );
-        return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
 
     /// <summary>Returns the identity claims of the authenticated caller.</summary>

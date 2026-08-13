@@ -10,7 +10,8 @@ The domain layer follows **Domain-Driven Design (DDD)** and clean architecture p
 
 - **Entities** for persisted business state
 - **DTOs** for API contracts and automatic validation
-- **Domain Exceptions** for client-safe failure mapping
+- **Result Pattern** (`Result` / `Result<T>`) for expected business outcomes
+- **Domain Exceptions** for unexpected/domain exception mapping
 - **Repository and Unit of Work Interfaces** for data access abstraction
 - **Security Abstractions** (`ITokenService`, `IPasswordHasher`, `ISecretClient`) so Application does not depend on Infrastructure
 - **Typed Options** (`JwtOptions`, `IdempotencyOptions`, `CorsOptions`) as configuration contracts
@@ -278,9 +279,54 @@ public class AuthResponseDto
 
 ---
 
-## Common DTOs
+## Common Outcome and DTO Types
 
-### 1. ApiResponse<T>
+### 1. Result / Result<T>
+
+**Purpose**: Represents expected application service outcomes without throwing for normal business failures. Controllers map these outcomes to HTTP status codes while preserving the `ApiResponse<T>` response body.
+
+```csharp
+public enum ResultErrorType
+{
+    None, Failure, Validation, NotFound, Conflict, Unauthorized, Forbidden
+}
+
+public class Result
+{
+    public bool IsSuccess { get; }
+    public bool IsFailure => !IsSuccess;
+    public string Message { get; }
+    public ResultErrorType ErrorType { get; }
+    public IReadOnlyList<string> Errors { get; }
+
+    public static Result Success(string message = "Operation successful");
+    public static Result Failure(string message, IReadOnlyList<string>? errors = null);
+    public static Result NotFound(string message);
+    public static Result Conflict(string message);
+    public static Result Validation(string message, IReadOnlyList<string>? errors = null);
+    public static Result Unauthorized(string message);
+    public static Result Forbidden(string message);
+}
+
+public sealed class Result<T> : Result
+{
+    public T? Value { get; }
+}
+```
+
+**HTTP Mapping by `ApiControllerBase`:**
+
+| Result type | HTTP status |
+| ----------- | ----------- |
+| Success | 200 OK, or 201 Created via create-endpoint success factories |
+| NotFound | 404 Not Found |
+| Conflict | 409 Conflict |
+| Validation | 400 Bad Request |
+| Unauthorized | 401 Unauthorized |
+| Forbidden | 403 Forbidden |
+| Failure | 400 Bad Request |
+
+### 2. ApiResponse<T>
 
 **Purpose**: Standardized API response wrapper.
 
@@ -294,7 +340,7 @@ public class ApiResponse<T>
 }
 ```
 
-### 2. PagedResult<T>
+### 3. PagedResult<T>
 
 **Purpose**: Pagination support for large datasets.
 
@@ -443,16 +489,16 @@ IdempotentRequest is independent of BaseEntity and stores HTTP idempotency state
 
 ## Domain Services Interfaces
 
-Service methods accept `CancellationToken` values from controllers. Domain exceptions are converted by the global exception handler, while expected validation/business failures use `ApiResponse<T>`.
+Service methods accept `CancellationToken` values from controllers and return `Result<T>`. Expected validation/business outcomes use `Result<T>.Success/Failure/NotFound/Conflict/Validation/Unauthorized/Forbidden`; unhandled/domain exceptions are converted by the global exception handler.
 
 ```csharp
 public interface IAuthService
 {
-    Task<ApiResponse<AuthResponseDto>> LoginAsync(LoginDto loginDto, CancellationToken cancellationToken = default);
-    Task<ApiResponse<AuthResponseDto>> RefreshTokenAsync(RefreshTokenDto refreshTokenDto, CancellationToken cancellationToken = default);
-    Task<ApiResponse<bool>> LogoutAsync(int userId, CancellationToken cancellationToken = default);
-    Task<ApiResponse<bool>> ChangePasswordAsync(int userId, ChangePasswordDto changePasswordDto, CancellationToken cancellationToken = default);
+    Task<Result<AuthResponseDto>> LoginAsync(LoginDto loginDto, CancellationToken cancellationToken = default);
+    Task<Result<AuthResponseDto>> RefreshTokenAsync(RefreshTokenDto refreshTokenDto, CancellationToken cancellationToken = default);
+    Task<Result<bool>> LogoutAsync(int userId, CancellationToken cancellationToken = default);
+    Task<Result<bool>> ChangePasswordAsync(int userId, ChangePasswordDto changePasswordDto, CancellationToken cancellationToken = default);
 }
 ```
 
-This domain model provides a secure foundation with clean layering, validated DTOs, typed configuration, provider-agnostic concurrency, and explicit abstractions for data access, tokens, hashing, and secrets.
+This domain model provides a secure foundation with clean layering, explicit `Result<T>` outcomes, validated DTOs, typed configuration, provider-agnostic concurrency, and explicit abstractions for data access, tokens, hashing, and secrets.

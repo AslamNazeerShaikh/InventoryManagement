@@ -1,3 +1,4 @@
+using InventoryManagement.Domain.Common;
 using InventoryManagement.Domain.DTOs;
 
 namespace InventoryManagement.Domain.Interfaces;
@@ -6,67 +7,67 @@ namespace InventoryManagement.Domain.Interfaces;
 public interface IInventoryAssignmentService
 {
     /// <summary>Lists all assignments.</summary>
-    Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetAllAssignmentsAsync(
+    Task<Result<IEnumerable<InventoryAssignmentDto>>> GetAllAssignmentsAsync(
         CancellationToken cancellationToken = default
     );
 
     /// <summary>Gets an assignment by identifier.</summary>
-    Task<ApiResponse<InventoryAssignmentDto>> GetAssignmentByIdAsync(
+    Task<Result<InventoryAssignmentDto>> GetAssignmentByIdAsync(
         int id,
         CancellationToken cancellationToken = default
     );
 
     /// <summary>Creates an assignment, decrementing available stock atomically.</summary>
-    Task<ApiResponse<InventoryAssignmentDto>> CreateAssignmentAsync(
+    Task<Result<InventoryAssignmentDto>> CreateAssignmentAsync(
         CreateInventoryAssignmentDto createAssignmentDto,
         int assignedByUserId,
         CancellationToken cancellationToken = default
     );
 
     /// <summary>Updates an active assignment, adjusting stock consistently.</summary>
-    Task<ApiResponse<InventoryAssignmentDto>> UpdateAssignmentAsync(
+    Task<Result<InventoryAssignmentDto>> UpdateAssignmentAsync(
         int id,
         UpdateInventoryAssignmentDto updateAssignmentDto,
         CancellationToken cancellationToken = default
     );
 
     /// <summary>Processes a return, restoring stock atomically.</summary>
-    Task<ApiResponse<bool>> ReturnAssignmentAsync(
+    Task<Result<bool>> ReturnAssignmentAsync(
         ReturnInventoryAssignmentDto returnAssignmentDto,
         int returnedToUserId,
         CancellationToken cancellationToken = default
     );
 
     /// <summary>Lists a user's assignments.</summary>
-    Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetAssignmentsByUserIdAsync(
+    Task<Result<IEnumerable<InventoryAssignmentDto>>> GetAssignmentsByUserIdAsync(
         int userId,
         CancellationToken cancellationToken = default
     );
 
     /// <summary>Lists active assignments.</summary>
-    Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetActiveAssignmentsAsync(
+    Task<Result<IEnumerable<InventoryAssignmentDto>>> GetActiveAssignmentsAsync(
         CancellationToken cancellationToken = default
     );
 
     /// <summary>Lists a user's active assignments.</summary>
-    Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetActiveAssignmentsByUserIdAsync(
+    Task<Result<IEnumerable<InventoryAssignmentDto>>> GetActiveAssignmentsByUserIdAsync(
         int userId,
         CancellationToken cancellationToken = default
     );
 
     /// <summary>Lists overdue assignments.</summary>
-    Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetOverdueAssignmentsAsync(
+    Task<Result<IEnumerable<InventoryAssignmentDto>>> GetOverdueAssignmentsAsync(
         CancellationToken cancellationToken = default
     );
 
     /// <summary>Returns the assignment history for an inventory item.</summary>
-    Task<ApiResponse<AssignmentHistoryDto>> GetAssignmentHistoryAsync(
+    Task<Result<AssignmentHistoryDto>> GetAssignmentHistoryAsync(
         int inventoryId,
         CancellationToken cancellationToken = default
     );
 
     /// <summary>Returns a deterministic page of assignments.</summary>
-    Task<ApiResponse<PagedResult<InventoryAssignmentDto>>> GetAssignmentsPagedAsync(
+    Task<Result<PagedResult<InventoryAssignmentDto>>> GetAssignmentsPagedAsync(
         int pageNumber,
         int pageSize,
         CancellationToken cancellationToken = default

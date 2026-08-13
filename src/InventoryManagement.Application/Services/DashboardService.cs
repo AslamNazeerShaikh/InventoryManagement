@@ -1,4 +1,5 @@
 using InventoryManagement.Application.Mapping;
+using InventoryManagement.Domain.Common;
 using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.DTOs;
 using InventoryManagement.Domain.Enums;
@@ -22,7 +23,7 @@ public sealed class DashboardService : IDashboardService
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<DashboardStatsDto>> GetDashboardStatsAsync(
+    public async Task<Result<DashboardStatsDto>> GetDashboardStatsAsync(
         CancellationToken cancellationToken = default
     )
     {
@@ -85,11 +86,11 @@ public sealed class DashboardService : IDashboardService
                 .ConfigureAwait(false),
         };
 
-        return ApiResponse<DashboardStatsDto>.Success(stats);
+        return Result<DashboardStatsDto>.Success(stats);
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<IEnumerable<InventoryDto>>> GetRecentInventoriesAsync(
+    public async Task<Result<IEnumerable<InventoryDto>>> GetRecentInventoriesAsync(
         int count = 10,
         CancellationToken cancellationToken = default
     )
@@ -103,11 +104,11 @@ public sealed class DashboardService : IDashboardService
                 cancellationToken: cancellationToken
             )
             .ConfigureAwait(false);
-        return ApiResponse<IEnumerable<InventoryDto>>.Success(inventories.ToDto());
+        return Result<IEnumerable<InventoryDto>>.Success(inventories.ToDto());
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetRecentAssignmentsAsync(
+    public async Task<Result<IEnumerable<InventoryAssignmentDto>>> GetRecentAssignmentsAsync(
         int count = 10,
         CancellationToken cancellationToken = default
     )
@@ -122,11 +123,11 @@ public sealed class DashboardService : IDashboardService
                 cancellationToken: cancellationToken
             )
             .ConfigureAwait(false);
-        return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Success(assignments.ToDto());
+        return Result<IEnumerable<InventoryAssignmentDto>>.Success(assignments.ToDto());
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<IEnumerable<InventoryDto>>> GetExpiryAlertsAsync(
+    public async Task<Result<IEnumerable<InventoryDto>>> GetExpiryAlertsAsync(
         CancellationToken cancellationToken = default
     )
     {
@@ -136,11 +137,11 @@ public sealed class DashboardService : IDashboardService
         var expiring = await _unitOfWork
             .Inventories.GetExpiringInventoriesAsync(expiryDate, cancellationToken)
             .ConfigureAwait(false);
-        return ApiResponse<IEnumerable<InventoryDto>>.Success(expiring.ToDto());
+        return Result<IEnumerable<InventoryDto>>.Success(expiring.ToDto());
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<IEnumerable<InventoryDto>>> GetLowStockAlertsAsync(
+    public async Task<Result<IEnumerable<InventoryDto>>> GetLowStockAlertsAsync(
         CancellationToken cancellationToken = default
     )
     {
@@ -150,17 +151,17 @@ public sealed class DashboardService : IDashboardService
                 cancellationToken
             )
             .ConfigureAwait(false);
-        return ApiResponse<IEnumerable<InventoryDto>>.Success(lowStock.ToDto());
+        return Result<IEnumerable<InventoryDto>>.Success(lowStock.ToDto());
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetOverdueAlertsAsync(
+    public async Task<Result<IEnumerable<InventoryAssignmentDto>>> GetOverdueAlertsAsync(
         CancellationToken cancellationToken = default
     )
     {
         var overdue = await _unitOfWork
             .InventoryAssignments.GetOverdueAssignmentsAsync(cancellationToken)
             .ConfigureAwait(false);
-        return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Success(overdue.ToDto());
+        return Result<IEnumerable<InventoryAssignmentDto>>.Success(overdue.ToDto());
     }
 }

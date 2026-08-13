@@ -1,3 +1,4 @@
+using InventoryManagement.API.Infrastructure;
 using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.DTOs;
 using InventoryManagement.Domain.Interfaces;
@@ -15,7 +16,7 @@ namespace InventoryManagement.API.Controllers;
 [Route("api/[controller]")]
 [Produces("application/json")]
 [Authorize(Policy = AuthConstants.Policies.AllRoles)]
-public class DashboardController : ControllerBase
+public class DashboardController : ApiControllerBase
 {
     private readonly IDashboardService _dashboardService;
     private readonly ILogger<DashboardController> _logger;
@@ -34,14 +35,14 @@ public class DashboardController : ControllerBase
     [HttpGet("stats")]
     public async Task<ActionResult<ApiResponse<DashboardStatsDto>>> GetDashboardStats(
         CancellationToken cancellationToken
-    ) => Ok(await _dashboardService.GetDashboardStatsAsync(cancellationToken));
+    ) => HandleResult(await _dashboardService.GetDashboardStatsAsync(cancellationToken));
 
     /// <summary>Gets the most recent inventory items (count clamped 1–50).</summary>
     [HttpGet("recent-inventories")]
     public async Task<ActionResult<ApiResponse<IEnumerable<InventoryDto>>>> GetRecentInventories(
         [FromQuery] int count = 10,
         CancellationToken cancellationToken = default
-    ) => Ok(await _dashboardService.GetRecentInventoriesAsync(count, cancellationToken));
+    ) => HandleResult(await _dashboardService.GetRecentInventoriesAsync(count, cancellationToken));
 
     /// <summary>Gets the most recent assignments (Admin or Provider; count clamped 1–50).</summary>
     [HttpGet("recent-assignments")]
@@ -51,19 +52,19 @@ public class DashboardController : ControllerBase
     > GetRecentAssignments(
         [FromQuery] int count = 10,
         CancellationToken cancellationToken = default
-    ) => Ok(await _dashboardService.GetRecentAssignmentsAsync(count, cancellationToken));
+    ) => HandleResult(await _dashboardService.GetRecentAssignmentsAsync(count, cancellationToken));
 
     /// <summary>Gets items approaching expiry.</summary>
     [HttpGet("alerts/expiry")]
     public async Task<ActionResult<ApiResponse<IEnumerable<InventoryDto>>>> GetExpiryAlerts(
         CancellationToken cancellationToken
-    ) => Ok(await _dashboardService.GetExpiryAlertsAsync(cancellationToken));
+    ) => HandleResult(await _dashboardService.GetExpiryAlertsAsync(cancellationToken));
 
     /// <summary>Gets low-stock items.</summary>
     [HttpGet("alerts/low-stock")]
     public async Task<ActionResult<ApiResponse<IEnumerable<InventoryDto>>>> GetLowStockAlerts(
         CancellationToken cancellationToken
-    ) => Ok(await _dashboardService.GetLowStockAlertsAsync(cancellationToken));
+    ) => HandleResult(await _dashboardService.GetLowStockAlertsAsync(cancellationToken));
 
     /// <summary>Gets overdue assignments (Admin or Provider).</summary>
     [HttpGet("alerts/overdue")]
@@ -71,7 +72,7 @@ public class DashboardController : ControllerBase
     public async Task<
         ActionResult<ApiResponse<IEnumerable<InventoryAssignmentDto>>>
     > GetOverdueAlerts(CancellationToken cancellationToken) =>
-        Ok(await _dashboardService.GetOverdueAlertsAsync(cancellationToken));
+        HandleResult(await _dashboardService.GetOverdueAlertsAsync(cancellationToken));
 
     /// <summary>Gets a combined alerts summary. Overdue alerts are included only for privileged callers.</summary>
     [HttpGet("alerts/summary")]
@@ -87,18 +88,15 @@ public class DashboardController : ControllerBase
         if (isAdminOrProvider)
         {
             var overdueResult = await _dashboardService.GetOverdueAlertsAsync(cancellationToken);
-            if (overdueResult.IsSuccess && overdueResult.Data is not null)
-            {
-                overdue = overdueResult.Data;
-            }
+            overdue = overdueResult.Value ?? Enumerable.Empty<InventoryAssignmentDto>();
         }
 
         var summary = new
         {
-            ExpiryAlerts = expiry.Data ?? Enumerable.Empty<InventoryDto>(),
-            ExpiryCount = expiry.Data?.Count() ?? 0,
-            LowStockAlerts = lowStock.Data ?? Enumerable.Empty<InventoryDto>(),
-            LowStockCount = lowStock.Data?.Count() ?? 0,
+            ExpiryAlerts = expiry.Value ?? Enumerable.Empty<InventoryDto>(),
+            ExpiryCount = expiry.Value?.Count() ?? 0,
+            LowStockAlerts = lowStock.Value ?? Enumerable.Empty<InventoryDto>(),
+            LowStockCount = lowStock.Value?.Count() ?? 0,
             OverdueAlerts = overdue,
             OverdueCount = overdue.Count(),
             HasPermissionForOverdue = isAdminOrProvider,
@@ -131,27 +129,27 @@ public class DashboardController : ControllerBase
                 cancellationToken
             );
             recentAssignments =
-                recentAssignmentsResult.Data ?? Enumerable.Empty<InventoryAssignmentDto>();
+                recentAssignmentsResult.Value ?? Enumerable.Empty<InventoryAssignmentDto>();
 
             var overdueResult = await _dashboardService.GetOverdueAlertsAsync(cancellationToken);
-            overdue = overdueResult.Data ?? Enumerable.Empty<InventoryAssignmentDto>();
+            overdue = overdueResult.Value ?? Enumerable.Empty<InventoryAssignmentDto>();
         }
 
         var overview = new
         {
-            Stats = stats.Data,
-            RecentInventories = recentInventories.Data ?? Enumerable.Empty<InventoryDto>(),
+            Stats = stats.Value,
+            RecentInventories = recentInventories.Value ?? Enumerable.Empty<InventoryDto>(),
             RecentAssignments = recentAssignments,
             Alerts = new
             {
-                Expiry = expiry.Data ?? Enumerable.Empty<InventoryDto>(),
-                LowStock = lowStock.Data ?? Enumerable.Empty<InventoryDto>(),
+                Expiry = expiry.Value ?? Enumerable.Empty<InventoryDto>(),
+                LowStock = lowStock.Value ?? Enumerable.Empty<InventoryDto>(),
                 Overdue = overdue,
             },
             AlertCounts = new
             {
-                ExpiryCount = expiry.Data?.Count() ?? 0,
-                LowStockCount = lowStock.Data?.Count() ?? 0,
+                ExpiryCount = expiry.Value?.Count() ?? 0,
+                LowStockCount = lowStock.Value?.Count() ?? 0,
                 OverdueCount = overdue.Count(),
             },
             UserPermissions = new

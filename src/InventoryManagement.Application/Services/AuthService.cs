@@ -1,4 +1,5 @@
 using InventoryManagement.Application.Mapping;
+using InventoryManagement.Domain.Common;
 using InventoryManagement.Domain.DTOs;
 using InventoryManagement.Domain.Interfaces;
 using InventoryManagement.Domain.Security;
@@ -37,7 +38,7 @@ public sealed class AuthService : IAuthService
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<AuthResponseDto>> LoginAsync(
+    public async Task<Result<AuthResponseDto>> LoginAsync(
         LoginDto loginDto,
         CancellationToken cancellationToken = default
     )
@@ -50,20 +51,20 @@ public sealed class AuthService : IAuthService
         if (user is null)
         {
             _logger.LogInformation("Login failed for {Email}: user not found.", loginDto.Email);
-            return ApiResponse<AuthResponseDto>.Failure("Invalid email or password");
+            return Result<AuthResponseDto>.Unauthorized("Invalid email or password");
         }
 
         var verification = _passwordHasher.Verify(user.PasswordHash, loginDto.Password);
         if (verification == PasswordVerificationOutcome.Failed)
         {
             _logger.LogInformation("Login failed for {Email}: bad password.", loginDto.Email);
-            return ApiResponse<AuthResponseDto>.Failure("Invalid email or password");
+            return Result<AuthResponseDto>.Unauthorized("Invalid email or password");
         }
 
         if (!user.IsActive)
         {
             _logger.LogWarning("Login blocked for {Email}: account disabled.", loginDto.Email);
-            return ApiResponse<AuthResponseDto>.Failure("Account is disabled");
+            return Result<AuthResponseDto>.Unauthorized("Account is disabled");
         }
 
         // Transparently upgrade legacy/weaker hashes on successful login.
@@ -77,11 +78,11 @@ public sealed class AuthService : IAuthService
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("User {UserId} logged in.", user.Id);
-        return ApiResponse<AuthResponseDto>.Success(response, "Login successful");
+        return Result<AuthResponseDto>.Success(response, "Login successful");
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<AuthResponseDto>> RefreshTokenAsync(
+    public async Task<Result<AuthResponseDto>> RefreshTokenAsync(
         RefreshTokenDto refreshTokenDto,
         CancellationToken cancellationToken = default
     )
@@ -94,18 +95,18 @@ public sealed class AuthService : IAuthService
         if (user is null)
         {
             _logger.LogWarning("Refresh token rejected: no matching active token.");
-            return ApiResponse<AuthResponseDto>.Failure("Invalid or expired refresh token");
+            return Result<AuthResponseDto>.Unauthorized("Invalid or expired refresh token");
         }
 
         var response = await IssueTokensAsync(user, cancellationToken).ConfigureAwait(false);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Refresh token rotated for user {UserId}.", user.Id);
-        return ApiResponse<AuthResponseDto>.Success(response, "Token refreshed successfully");
+        return Result<AuthResponseDto>.Success(response, "Token refreshed successfully");
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<bool>> LogoutAsync(
+    public async Task<Result<bool>> LogoutAsync(
         int userId,
         CancellationToken cancellationToken = default
     )
@@ -115,7 +116,7 @@ public sealed class AuthService : IAuthService
             .ConfigureAwait(false);
         if (user is null)
         {
-            return ApiResponse<bool>.Failure("User not found");
+            return Result<bool>.NotFound("User not found");
         }
 
         user.RefreshToken = null;
@@ -123,11 +124,11 @@ public sealed class AuthService : IAuthService
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("User {UserId} logged out.", userId);
-        return ApiResponse<bool>.Success(true, "Logout successful");
+        return Result<bool>.Success(true, "Logout successful");
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<bool>> ChangePasswordAsync(
+    public async Task<Result<bool>> ChangePasswordAsync(
         int userId,
         ChangePasswordDto changePasswordDto,
         CancellationToken cancellationToken = default
@@ -138,7 +139,7 @@ public sealed class AuthService : IAuthService
             .ConfigureAwait(false);
         if (user is null)
         {
-            return ApiResponse<bool>.Failure("User not found");
+            return Result<bool>.NotFound("User not found");
         }
 
         if (
@@ -146,7 +147,7 @@ public sealed class AuthService : IAuthService
             == PasswordVerificationOutcome.Failed
         )
         {
-            return ApiResponse<bool>.Failure("Current password is incorrect");
+            return Result<bool>.Validation("Current password is incorrect");
         }
 
         user.PasswordHash = _passwordHasher.Hash(changePasswordDto.NewPassword);
@@ -156,7 +157,7 @@ public sealed class AuthService : IAuthService
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Password changed for user {UserId}.", userId);
-        return ApiResponse<bool>.Success(true, "Password changed successfully");
+        return Result<bool>.Success(true, "Password changed successfully");
     }
 
     /// <summary>Issues a fresh access/refresh token pair and persists the refresh-token hash on the user.</summary>
