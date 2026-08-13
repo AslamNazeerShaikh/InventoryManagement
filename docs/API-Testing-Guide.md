@@ -2,12 +2,14 @@
 
 ## Overview
 
-This guide provides step-by-step instructions for testing all API endpoints in the correct sequence to ensure proper data flow and avoid exceptions.
+This guide provides step-by-step instructions for testing all API endpoints in the correct sequence. It reflects the current security hardening: unified JWT config, hashed refresh tokens, automatic model validation, auth rate limiting, idempotency, concurrency handling, and `/health`.
 
 ## Base URL
 
 - **Development**: `https://localhost:7178`
 - **API Documentation**: `https://localhost:7178/openapi/v1.json`
+- **Scalar API Reference**: `https://localhost:7178/scalar/v1`
+- **Health Check**: `https://localhost:7178/health`
 
 ## Authentication Setup
 
@@ -15,10 +17,12 @@ This guide provides step-by-step instructions for testing all API endpoints in t
 
 The system comes pre-seeded with an admin user for initial access.
 
-**Default Admin Credentials:**
+**Local Development Admin Credentials:**
 
 - Email: `admin@inventorymanagement.com`
-- Password: `Admin@123`
+- Password: `ChangeMe_LocalDev!2026`
+
+> Production should configure `SeedData:AdminPassword`. If it is empty, a strong random password is generated and logged once at startup. There is no well-known production default password.
 
 **Request:**
 
@@ -28,7 +32,7 @@ Content-Type: application/json
 
 {
   "email": "admin@inventorymanagement.com",
-  "password": "Admin@123"
+  "password": "ChangeMe_LocalDev!2026"
 }
 ```
 
@@ -37,24 +41,25 @@ Content-Type: application/json
 ```json
 {
   "isSuccess": true,
+  "message": "Login successful",
   "data": {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "refreshToken": "refresh_token_here",
-    "expiresAt": "2024-01-01T12:00:00Z",
+    "accessToken": "jwt_access_token_here",
+    "refreshToken": "raw_refresh_token_returned_once",
+    "expiresAt": "2026-08-13T18:45:00Z",
     "user": {
       "id": 1,
       "email": "admin@inventorymanagement.com",
       "name": "System Administrator",
-      "role": "Admin",
+      "role": 1,
       "isAdmin": true,
       "isProvider": false
     }
   },
-  "message": "Login successful"
+  "errors": []
 }
 ```
 
-**Save the JWT token** - you'll need it for all subsequent requests as `Authorization: Bearer {token}`
+Save the JWT access token for `Authorization: Bearer <accessToken>`. Save the refresh token; the server stores only its SHA-256 hash.
 
 ---
 
@@ -66,24 +71,10 @@ Content-Type: application/json
 
 ```http
 GET /api/auth/me
-Authorization: Bearer {your_jwt_token}
+Authorization: Bearer <accessToken>
 ```
 
-### 1.2 Change Password
-
-```http
-POST /api/auth/change-password
-Authorization: Bearer {your_jwt_token}
-Content-Type: application/json
-
-{
-  "currentPassword": "Admin@123",
-  "newPassword": "NewPassword@123",
-  "confirmPassword": "NewPassword@123"
-}
-```
-
-### 1.3 Refresh Token
+### 1.2 Refresh Token
 
 ```http
 POST /api/auth/refresh
@@ -94,12 +85,34 @@ Content-Type: application/json
 }
 ```
 
+A successful refresh returns a new access token and raw refresh token.
+
+### 1.3 Change Password
+
+```http
+POST /api/auth/change-password
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{
+  "currentPassword": "ChangeMe_LocalDev!2026",
+  "newPassword": "NewPassword@123",
+  "confirmPassword": "NewPassword@123"
+}
+```
+
+Changing a password revokes existing refresh tokens. For repeatable testing, either change it back or reset the development database.
+
 ### 1.4 Logout
 
 ```http
 POST /api/auth/logout
-Authorization: Bearer {your_jwt_token}
+Authorization: Bearer <accessToken>
 ```
+
+### 1.5 Auth Rate Limit
+
+`POST /api/auth/login` and `POST /api/auth/refresh` use fixed-window rate limiting from `RateLimiting:Auth` (default 10 requests per 60 seconds per remote IP). Excess requests return HTTP 429.
 
 ---
 
@@ -107,18 +120,20 @@ Authorization: Bearer {your_jwt_token}
 
 ### 2.1 Create Users (Admin Only)
 
+Passwords must be at least 8 characters.
+
 #### Create a Nurse Practitioner
 
 ```http
 POST /api/users
-Authorization: Bearer {admin_jwt_token}
+Authorization: Bearer <accessToken>
 Content-Type: application/json
 
 {
+  "name": "Dr. Sarah Johnson",
   "email": "nurse1@hospital.com",
   "password": "Nurse@123",
-  "name": "Dr. Sarah Johnson",
-  "role": "NursePractitioner",
+  "role": 2,
   "isAdmin": false,
   "isProvider": true
 }
@@ -128,80 +143,67 @@ Content-Type: application/json
 
 ```http
 POST /api/users
-Authorization: Bearer {admin_jwt_token}
+Authorization: Bearer <accessToken>
 Content-Type: application/json
 
 {
+  "name": "John Smith",
   "email": "staff1@hospital.com",
   "password": "Staff@123",
-  "name": "John Smith",
-  "role": "Staff",
+  "role": 3,
   "isAdmin": false,
   "isProvider": false
 }
 ```
 
-### 2.2 Get All Users
+### 2.2 Retrieve and Update Users
 
 ```http
 GET /api/users
-Authorization: Bearer {admin_jwt_token}
-```
+Authorization: Bearer <accessToken>
 
-### 2.3 Get Users with Pagination
-
-```http
 GET /api/users/paged?pageNumber=1&pageSize=10
-Authorization: Bearer {admin_jwt_token}
-```
+Authorization: Bearer <accessToken>
 
-### 2.4 Get User by ID
-
-```http
 GET /api/users/1
-Authorization: Bearer {admin_jwt_token}
-```
+Authorization: Bearer <accessToken>
 
-### 2.5 Get User by Email
-
-```http
 GET /api/users/by-email/nurse1@hospital.com
-Authorization: Bearer {admin_jwt_token}
+Authorization: Bearer <accessToken>
 ```
-
-### 2.6 Update User
 
 ```http
 PUT /api/users/2
-Authorization: Bearer {admin_jwt_token}
+Authorization: Bearer <accessToken>
 Content-Type: application/json
 
 {
-  "email": "nurse1@hospital.com",
   "name": "Dr. Sarah Johnson-Updated",
-  "role": "NursePractitioner",
+  "email": "nurse1@hospital.com",
+  "role": 2,
   "isAdmin": false,
-  "isProvider": true
+  "isProvider": true,
+  "isActive": true
 }
 ```
 
-### 2.7 Get Nurse Practitioners
+Non-admin callers can update their own profile but cannot change role/admin/provider flags.
+
+### 2.3 Role Lists
 
 ```http
 GET /api/users/nurse-practitioners
-Authorization: Bearer {admin_jwt_token}
-```
+Authorization: Bearer <accessToken>
 
-### 2.8 Get Active Users
-
-```http
 GET /api/users/active
-Authorization: Bearer {admin_jwt_token}
+Authorization: Bearer <accessToken>
 ```
 
 ---
 
 ## 3. InventoryController Testing
+
+For mutating requests outside `/api/auth`, you may send an `Idempotency-Key` header to make retries safe.
 
 ### 3.1 Create Inventory Items
 
@@ -209,20 +211,23 @@ Authorization: Bearer {admin_jwt_token}
 
 ```http
 POST /api/inventory
-Authorization: Bearer {admin_jwt_token}
+Authorization: Bearer <accessToken>
+Idempotency-Key: inv-create-thermometer-001
 Content-Type: application/json
 
 {
   "equipmentName": "Digital Thermometer",
   "description": "Non-contact infrared thermometer",
   "category": "Diagnostic Equipment",
-  "manufacturer": "MedTech Corp",
-  "model": "MT-2024",
-  "serialNumber": "MT2024001",
+  "brand": "MedTech Corp",
+  "model": "MT-2026",
+  "serialNumber": "MT2026001",
   "barcode": "1234567890123",
   "quantity": 25,
-  "unitCost": 89.99,
-  "expiryDate": "2026-12-31T00:00:00Z",
+  "purchasePrice": 89.99,
+  "expiryDate": "2027-12-31T00:00:00Z",
+  "manufactureDate": "2026-01-15T00:00:00Z",
+  "supplier": "MedSupply Inc",
   "location": "Storage Room A",
   "notes": "Temperature range: -10°C to 50°C"
 }
@@ -232,140 +237,117 @@ Content-Type: application/json
 
 ```http
 POST /api/inventory
-Authorization: Bearer {admin_jwt_token}
+Authorization: Bearer <accessToken>
+Idempotency-Key: inv-create-bp-001
 Content-Type: application/json
 
 {
   "equipmentName": "Blood Pressure Monitor",
   "description": "Automatic digital blood pressure monitor",
   "category": "Diagnostic Equipment",
-  "manufacturer": "HealthTech Inc",
+  "brand": "HealthTech Inc",
   "model": "HT-BP200",
   "serialNumber": "HT200001",
   "barcode": "2345678901234",
   "quantity": 15,
-  "unitCost": 149.99,
-  "expiryDate": "2027-06-30T00:00:00Z",
+  "purchasePrice": 149.99,
+  "expiryDate": "2028-06-30T00:00:00Z",
+  "supplier": "HealthTech Distribution",
   "location": "Storage Room B",
   "notes": "Adult and pediatric cuffs included"
 }
 ```
 
-#### Create Expiring Item (for testing alerts)
+#### Create Expiring/Low Stock Item
 
 ```http
 POST /api/inventory
-Authorization: Bearer {admin_jwt_token}
+Authorization: Bearer <accessToken>
+Idempotency-Key: inv-create-syringes-001
 Content-Type: application/json
 
 {
   "equipmentName": "Disposable Syringes",
   "description": "Sterile disposable syringes 10ml",
   "category": "Disposables",
-  "manufacturer": "SafeMed",
+  "brand": "SafeMed",
   "model": "SM-SYR10",
-  "serialNumber": "SM2024001",
+  "serialNumber": "SM2026001",
   "barcode": "3456789012345",
   "quantity": 3,
-  "unitCost": 2.50,
-  "expiryDate": "2025-03-15T00:00:00Z",
+  "purchasePrice": 2.50,
+  "expiryDate": "2026-10-15T00:00:00Z",
+  "supplier": "SafeMed Supplies",
   "location": "Storage Room C",
   "notes": "Low stock - expiring soon"
 }
 ```
 
-### 3.2 Retrieve Inventory Items
-
-#### Get All Inventory
+### 3.2 Retrieve, Search, and Filter
 
 ```http
 GET /api/inventory
-Authorization: Bearer {admin_jwt_token}
-```
+Authorization: Bearer <accessToken>
 
-#### Get Paginated Inventory
-
-```http
 GET /api/inventory/paged?pageNumber=1&pageSize=5
-Authorization: Bearer {admin_jwt_token}
-```
+Authorization: Bearer <accessToken>
 
-#### Get Item by ID
-
-```http
 GET /api/inventory/1
-Authorization: Bearer {admin_jwt_token}
-```
+Authorization: Bearer <accessToken>
 
-#### Get Item by Barcode (Scanning Simulation)
-
-```http
 GET /api/inventory/barcode/1234567890123
-Authorization: Bearer {admin_jwt_token}
+Authorization: Bearer <accessToken>
 ```
-
-### 3.3 Search and Filter
-
-#### Search Inventory
 
 ```http
 POST /api/inventory/search
-Authorization: Bearer {admin_jwt_token}
+Authorization: Bearer <accessToken>
 Content-Type: application/json
 
 {
   "searchTerm": "thermometer",
   "category": "Diagnostic Equipment",
-  "manufacturer": "MedTech Corp"
+  "pageNumber": 1,
+  "pageSize": 10
 }
 ```
 
-#### Get Available Items
-
 ```http
 GET /api/inventory/available
-Authorization: Bearer {admin_jwt_token}
-```
+Authorization: Bearer <accessToken>
 
-#### Get Expiring Items (3-6 months)
-
-```http
 GET /api/inventory/expiring?monthsBefore=6
-Authorization: Bearer {admin_jwt_token}
-```
+Authorization: Bearer <accessToken>
 
-#### Get Low Stock Items
-
-```http
 GET /api/inventory/low-stock?threshold=5
-Authorization: Bearer {admin_jwt_token}
-```
+Authorization: Bearer <accessToken>
 
-#### Get Items by Category
-
-```http
 GET /api/inventory/category/Diagnostic Equipment
-Authorization: Bearer {admin_jwt_token}
+Authorization: Bearer <accessToken>
 ```
 
-### 3.4 Update Inventory
+### 3.3 Update Inventory
 
 ```http
 PUT /api/inventory/1
-Authorization: Bearer {admin_jwt_token}
+Authorization: Bearer <accessToken>
+Idempotency-Key: inv-update-thermometer-001
 Content-Type: application/json
 
 {
   "equipmentName": "Digital Thermometer Pro",
   "description": "Non-contact infrared thermometer with memory",
   "category": "Diagnostic Equipment",
-  "manufacturer": "MedTech Corp",
-  "model": "MT-2024-Pro",
-  "serialNumber": "MT2024001",
+  "brand": "MedTech Corp",
+  "model": "MT-2026-Pro",
+  "serialNumber": "MT2026001",
   "barcode": "1234567890123",
   "quantity": 30,
-  "unitCost": 99.99,
-  "expiryDate": "2026-12-31T00:00:00Z",
+  "purchasePrice": 99.99,
+  "expiryDate": "2027-12-31T00:00:00Z",
+  "manufactureDate": "2026-01-15T00:00:00Z",
+  "supplier": "MedSupply Inc",
+  "status": 1,
   "location": "Storage Room A",
   "notes": "Updated model with 100 reading memory"
 }
@@ -375,111 +357,81 @@ Content-Type: application/json
 
 ## 4. InventoryAssignmentsController Testing
 
-### 4.1 Create Assignments
+Assignment create/return operations run in a transaction and use optimistic concurrency. Concurrent conflicting stock updates return HTTP 409.
 
-#### Assign Equipment to Nurse Practitioner
+### 4.1 Create Assignments
 
 ```http
 POST /api/inventoryassignments
-Authorization: Bearer {admin_jwt_token}
+Authorization: Bearer <accessToken>
+Idempotency-Key: assign-thermometer-user2-001
 Content-Type: application/json
 
 {
   "inventoryId": 1,
   "userId": 2,
-  "quantityAssigned": 2,
-  "assignedDate": "2024-01-15T10:00:00Z",
-  "expectedReturnDate": "2024-02-15T10:00:00Z",
-  "notes": "Assignment for mobile clinic duty"
+  "assignedQuantity": 2,
+  "expectedReturnDate": "2026-09-15T10:00:00Z",
+  "assignmentNotes": "Assignment for mobile clinic duty"
 }
 ```
 
-#### Assign Another Item
-
 ```http
 POST /api/inventoryassignments
-Authorization: Bearer {admin_jwt_token}
+Authorization: Bearer <accessToken>
+Idempotency-Key: assign-bp-user2-001
 Content-Type: application/json
 
 {
   "inventoryId": 2,
   "userId": 2,
-  "quantityAssigned": 1,
-  "assignedDate": "2024-01-15T10:00:00Z",
-  "expectedReturnDate": "2024-03-15T10:00:00Z",
-  "notes": "Patient monitoring assignment"
+  "assignedQuantity": 1,
+  "expectedReturnDate": "2026-10-15T10:00:00Z",
+  "assignmentNotes": "Patient monitoring assignment"
 }
 ```
 
 ### 4.2 Retrieve Assignments
 
-#### Get All Assignments (Admin/Provider only)
-
 ```http
 GET /api/inventoryassignments
-Authorization: Bearer {admin_jwt_token}
-```
+Authorization: Bearer <accessToken>
 
-#### Get Paginated Assignments
-
-```http
 GET /api/inventoryassignments/paged?pageNumber=1&pageSize=10
-Authorization: Bearer {admin_jwt_token}
-```
+Authorization: Bearer <accessToken>
 
-#### Get Assignment by ID
-
-```http
 GET /api/inventoryassignments/1
-Authorization: Bearer {admin_jwt_token}
-```
+Authorization: Bearer <accessToken>
 
-#### Get Assignments by User ID
-
-```http
 GET /api/inventoryassignments/user/2
-Authorization: Bearer {admin_jwt_token}
-```
+Authorization: Bearer <accessToken>
 
-#### Get Current User's Assignments (as the assigned user)
-
-```http
 GET /api/inventoryassignments/my-assignments
-Authorization: Bearer {nurse_jwt_token}
-```
+Authorization: Bearer <accessToken>
 
-#### Get Active Assignments
-
-```http
 GET /api/inventoryassignments/active
-Authorization: Bearer {admin_jwt_token}
-```
+Authorization: Bearer <accessToken>
 
-#### Get Active Assignments for Specific User
-
-```http
 GET /api/inventoryassignments/active/user/2
-Authorization: Bearer {admin_jwt_token}
-```
+Authorization: Bearer <accessToken>
 
-#### Get Assignment History for Inventory Item
-
-```http
 GET /api/inventoryassignments/history/inventory/1
-Authorization: Bearer {admin_jwt_token}
+Authorization: Bearer <accessToken>
 ```
 
 ### 4.3 Update Assignment
 
 ```http
 PUT /api/inventoryassignments/1
-Authorization: Bearer {admin_jwt_token}
+Authorization: Bearer <accessToken>
+Idempotency-Key: assignment-update-001
 Content-Type: application/json
 
 {
-  "quantityAssigned": 3,
-  "expectedReturnDate": "2024-02-28T10:00:00Z",
-  "notes": "Extended assignment for extended clinic hours"
+  "assignedQuantity": 3,
+  "expectedReturnDate": "2026-09-28T10:00:00Z",
+  "status": 1,
+  "assignmentNotes": "Extended assignment for extended clinic hours"
 }
 ```
 
@@ -487,13 +439,12 @@ Content-Type: application/json
 
 ```http
 POST /api/inventoryassignments/return
-Authorization: Bearer {admin_jwt_token}
+Authorization: Bearer <accessToken>
+Idempotency-Key: assignment-return-001
 Content-Type: application/json
 
 {
   "assignmentId": 1,
-  "quantityReturned": 2,
-  "returnCondition": "Good",
   "returnNotes": "All items returned in excellent condition"
 }
 ```
@@ -502,65 +453,75 @@ Content-Type: application/json
 
 ## 5. DashboardController Testing
 
-### 5.1 Dashboard Statistics
+Dashboard aggregate endpoints execute queries sequentially to avoid shared DbContext concurrency errors.
 
 ```http
 GET /api/dashboard/stats
-Authorization: Bearer {admin_jwt_token}
-```
+Authorization: Bearer <accessToken>
 
-### 5.2 Recent Items
-
-#### Recent Inventory Items
-
-```http
 GET /api/dashboard/recent-inventories?count=5
-Authorization: Bearer {admin_jwt_token}
-```
+Authorization: Bearer <accessToken>
 
-#### Recent Assignments (Admin/Provider only)
-
-```http
 GET /api/dashboard/recent-assignments?count=5
-Authorization: Bearer {admin_jwt_token}
-```
+Authorization: Bearer <accessToken>
 
-### 5.3 Alerts
-
-#### Expiry Alerts
-
-```http
 GET /api/dashboard/alerts/expiry
-Authorization: Bearer {admin_jwt_token}
-```
+Authorization: Bearer <accessToken>
 
-#### Low Stock Alerts
-
-```http
 GET /api/dashboard/alerts/low-stock
-Authorization: Bearer {admin_jwt_token}
-```
+Authorization: Bearer <accessToken>
 
-#### Overdue Assignment Alerts (Admin/Provider only)
-
-```http
 GET /api/dashboard/alerts/overdue
-Authorization: Bearer {admin_jwt_token}
-```
+Authorization: Bearer <accessToken>
 
-#### Combined Alerts Summary
-
-```http
 GET /api/dashboard/alerts/summary
-Authorization: Bearer {admin_jwt_token}
+Authorization: Bearer <accessToken>
+
+GET /api/dashboard/overview
+Authorization: Bearer <accessToken>
 ```
 
-### 5.4 Complete Dashboard Overview
+---
+
+## 6. Health Check Testing
 
 ```http
-GET /api/dashboard/overview
-Authorization: Bearer {admin_jwt_token}
+GET /health
 ```
+
+**Expected:** 200 OK when the application is healthy.
+
+---
+
+## Idempotency Testing
+
+### Replay Same Request
+
+Send the same mutating request twice with the same `Idempotency-Key` and identical body.
+
+**Expected:** The second response replays the first result and includes:
+
+```http
+Idempotency-Replayed: true
+```
+
+### In-Progress Conflict
+
+Send two concurrent mutating requests with the same key.
+
+**Expected:** One proceeds; the other returns 409 Conflict.
+
+### Key Mismatch
+
+Reuse an `Idempotency-Key` with a different body, method, or path before retention expires.
+
+**Expected:** 422 Unprocessable Entity with a key mismatch message.
+
+### Auth Exclusion
+
+Send `Idempotency-Key` to `/api/auth/login`.
+
+**Expected:** Auth endpoints are excluded; token responses are not cached/replayed.
 
 ---
 
@@ -580,12 +541,19 @@ Content-Type: application/json
 }
 ```
 
-**Expected:** 401 Unauthorized
+**Expected:** 401 Unauthorized with a uniform invalid credentials response.
 
 #### Expired Token
 
-Use an old/expired JWT token in Authorization header.
-**Expected:** 401 Unauthorized
+Use an old/expired JWT token in the Authorization header.
+
+**Expected:** 401 Unauthorized.
+
+#### Auth Rate Limit
+
+Send more than the configured number of login attempts within the fixed window.
+
+**Expected:** 429 Too Many Requests.
 
 ### 2. Authorization Errors
 
@@ -593,17 +561,20 @@ Use an old/expired JWT token in Authorization header.
 
 ```http
 POST /api/users
-Authorization: Bearer {staff_jwt_token}
+Authorization: Bearer <nonAdminAccessToken>
 Content-Type: application/json
 
 {
   "email": "test@test.com",
   "password": "Test@123",
-  "name": "Test User"
+  "name": "Test User",
+  "role": 3,
+  "isAdmin": false,
+  "isProvider": false
 }
 ```
 
-**Expected:** 403 Forbidden
+**Expected:** 403 Forbidden.
 
 ### 3. Validation Errors
 
@@ -611,22 +582,35 @@ Content-Type: application/json
 
 ```http
 POST /api/users
-Authorization: Bearer {admin_jwt_token}
+Authorization: Bearer <accessToken>
 Content-Type: application/json
 
 {
   "email": "invalid-email",
   "password": "Test@123",
-  "name": "Test User"
+  "name": "Test User",
+  "role": 3
 }
 ```
 
-**Expected:** 400 Bad Request with validation errors
+**Expected:** 400 Bad Request with `ApiResponse` message `Validation failed` and an errors list.
 
-#### Duplicate Barcode
+#### Password Too Short
 
-Try creating inventory with existing barcode.
-**Expected:** 400 Bad Request
+```http
+POST /api/users
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{
+  "email": "short@test.com",
+  "password": "short",
+  "name": "Short Password User",
+  "role": 3
+}
+```
+
+**Expected:** 400 Bad Request. Password policy minimum is 8 characters.
 
 ### 4. Business Logic Errors
 
@@ -634,71 +618,67 @@ Try creating inventory with existing barcode.
 
 ```http
 POST /api/inventoryassignments
-Authorization: Bearer {admin_jwt_token}
+Authorization: Bearer <accessToken>
 Content-Type: application/json
 
 {
   "inventoryId": 1,
   "userId": 2,
-  "quantityAssigned": 1000,
-  "assignedDate": "2024-01-15T10:00:00Z",
-  "expectedReturnDate": "2024-02-15T10:00:00Z"
+  "assignedQuantity": 1000,
+  "expectedReturnDate": "2026-09-15T10:00:00Z"
 }
 ```
 
-**Expected:** 400 Bad Request with business rule violation
+**Expected:** 400/422 with business rule violation depending on service/exception path.
 
-#### Assign Expired Equipment
+#### Concurrent Assignment Conflict
 
-Try assigning equipment with past expiry date.
-**Expected:** 400 Bad Request
+Submit two simultaneous assignment requests that consume the same remaining stock.
+
+**Expected:** One succeeds; the conflicting update returns HTTP 409.
 
 ---
 
 ## Testing Tools Recommendations
 
-### 1. **Postman Collection**
+### 1. Postman Collection
 
-Create a Postman collection with:
+Create a Postman collection with environment variables for base URL, access token, refresh token, and idempotency keys.
 
-- Environment variables for base URL and tokens
-- Pre-request scripts for token management
-- Test scripts for response validation
-
-### 2. **PowerShell Script Testing**
+### 2. PowerShell Script Testing
 
 ```powershell
-# Set base URL and token
 $baseUrl = "https://localhost:7178"
-$token = "your_jwt_token_here"
+$loginBody = @{
+    email = "admin@inventorymanagement.com"
+    password = "ChangeMe_LocalDev!2026"
+} | ConvertTo-Json
+
+$response = Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method POST -Body $loginBody -ContentType "application/json"
+$token = $response.data.accessToken
+$refreshToken = $response.data.refreshToken
+
 $headers = @{
     "Authorization" = "Bearer $token"
     "Content-Type" = "application/json"
 }
 
-# Test login
-$loginBody = @{
-    email = "admin@inventorymanagement.com"
-    password = "Admin@123"
-} | ConvertTo-Json
-
-$response = Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method POST -Body $loginBody -ContentType "application/json"
-$token = $response.data.token
+Invoke-RestMethod -Uri "$baseUrl/health" -Method GET
 ```
 
-### 3. **cURL Testing**
+### 3. cURL Testing
 
 ```bash
-# Login
 curl -X POST "https://localhost:7178/api/auth/login" \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@inventorymanagement.com","password":"Admin@123"}' \
+  -d '{"email":"admin@inventorymanagement.com","password":"ChangeMe_LocalDev!2026"}' \
   -k
 
-# Get inventory with token
 curl -X GET "https://localhost:7178/api/inventory" \
-  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -H "Authorization: Bearer <accessToken>" \
   -k
+
+curl -X GET "https://localhost:7178/health" -k
 ```
 
 ---
@@ -707,18 +687,16 @@ curl -X GET "https://localhost:7178/api/inventory" \
 
 ### Reset Database (Development Only)
 
-If you need to reset test data:
-
-1. **Stop the application**
-2. **Delete the database file**: `src/InventoryManagement.Infrastructure/inventory.db`
-3. **Restart the application** - it will recreate the database with the admin user
+1. **Stop the application**.
+2. **Delete the database file**: `src\InventoryManagement.Infrastructure\inventory.db`.
+3. **Restart the application** - it will migrate the database and seed the admin user.
 
 ### Test Data Sequences
 
-1. **Setup Phase**: Login as admin, create users
-2. **Inventory Phase**: Create inventory items with various scenarios
-3. **Assignment Phase**: Create assignments, test workflows
-4. **Dashboard Phase**: Verify all data appears correctly
-5. **Cleanup Phase**: Return assignments, update statuses
+1. **Setup Phase**: Login as admin, create users.
+2. **Inventory Phase**: Create inventory items with various scenarios.
+3. **Assignment Phase**: Create assignments, test workflows, idempotency, and concurrency.
+4. **Dashboard Phase**: Verify all data appears correctly.
+5. **Cleanup Phase**: Return assignments, logout, or reset the database.
 
 This testing guide ensures you can thoroughly test all API endpoints while maintaining proper data flow and avoiding common errors.

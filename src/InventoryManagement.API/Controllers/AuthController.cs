@@ -1,11 +1,14 @@
+using InventoryManagement.API.Infrastructure;
 using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.DTOs;
 using InventoryManagement.Domain.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace InventoryManagement.API.Controllers;
 
+/// <summary>Authentication endpoints: login, token refresh, logout, password change and identity.</summary>
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
@@ -14,227 +17,99 @@ public class AuthController : ControllerBase
     private readonly IAuthService _authService;
     private readonly ILogger<AuthController> _logger;
 
+    /// <summary>Creates the controller.</summary>
     public AuthController(IAuthService authService, ILogger<AuthController> logger)
     {
         _authService = authService;
         _logger = logger;
     }
 
-    /// <summary>
-    /// Authenticate user and generate JWT token
-    /// </summary>
-    /// <param name="loginDto">User login credentials</param>
-    /// <returns>JWT token and user information</returns>
+    /// <summary>Authenticates a user and returns access and refresh tokens.</summary>
+    /// <param name="loginDto">User login credentials.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting(ApiServiceCollectionExtensions.AuthRateLimitPolicy)]
     public async Task<ActionResult<ApiResponse<AuthResponseDto>>> Login(
-        [FromBody] LoginDto loginDto
+        [FromBody] LoginDto loginDto,
+        CancellationToken cancellationToken
     )
     {
-        try
-        {
-            _logger.LogInformation("Login attempt for email: {Email}", loginDto.Email);
-
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(
-                    ApiResponse<AuthResponseDto>.Failure(
-                        "Invalid request data",
-                        ModelState
-                            .Values.SelectMany(v => v.Errors.Select(e => e.ErrorMessage))
-                            .ToList()
-                    )
-                );
-            }
-
-            var result = await _authService.LoginAsync(loginDto);
-
-            if (result.IsSuccess)
-            {
-                _logger.LogInformation("Successful login for email: {Email}", loginDto.Email);
-                return Ok(result);
-            }
-
-            _logger.LogWarning("Failed login attempt for email: {Email}", loginDto.Email);
-            return Unauthorized(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error during login for email: {Email}", loginDto.Email);
-            return StatusCode(
-                500,
-                ApiResponse<AuthResponseDto>.Failure("An error occurred during login")
-            );
-        }
+        var result = await _authService.LoginAsync(loginDto, cancellationToken);
+        return result.IsSuccess ? Ok(result) : Unauthorized(result);
     }
 
-    /// <summary>
-    /// Refresh JWT token using refresh token
-    /// </summary>
-    /// <param name="refreshTokenDto">Refresh token</param>
-    /// <returns>New JWT token</returns>
+    /// <summary>Exchanges a valid refresh token for a new token pair.</summary>
+    /// <param name="refreshTokenDto">The refresh token.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     [HttpPost("refresh")]
     [AllowAnonymous]
+    [EnableRateLimiting(ApiServiceCollectionExtensions.AuthRateLimitPolicy)]
     public async Task<ActionResult<ApiResponse<AuthResponseDto>>> RefreshToken(
-        [FromBody] RefreshTokenDto refreshTokenDto
+        [FromBody] RefreshTokenDto refreshTokenDto,
+        CancellationToken cancellationToken
     )
     {
-        try
-        {
-            _logger.LogInformation("Token refresh attempt");
-
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(
-                    ApiResponse<AuthResponseDto>.Failure(
-                        "Invalid request data",
-                        ModelState
-                            .Values.SelectMany(v => v.Errors.Select(e => e.ErrorMessage))
-                            .ToList()
-                    )
-                );
-            }
-
-            var result = await _authService.RefreshTokenAsync(refreshTokenDto);
-
-            if (result.IsSuccess)
-            {
-                _logger.LogInformation("Successful token refresh");
-                return Ok(result);
-            }
-
-            _logger.LogWarning("Failed token refresh attempt");
-            return Unauthorized(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error during token refresh");
-            return StatusCode(
-                500,
-                ApiResponse<AuthResponseDto>.Failure("An error occurred during token refresh")
-            );
-        }
+        var result = await _authService.RefreshTokenAsync(refreshTokenDto, cancellationToken);
+        return result.IsSuccess ? Ok(result) : Unauthorized(result);
     }
 
-    /// <summary>
-    /// Logout user and invalidate refresh token
-    /// </summary>
-    /// <returns>Success status</returns>
+    /// <summary>Revokes the current user's refresh token.</summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
     [HttpPost("logout")]
     [Authorize(Policy = AuthConstants.Policies.AllRoles)]
-    public async Task<ActionResult<ApiResponse<bool>>> Logout()
+    public async Task<ActionResult<ApiResponse<bool>>> Logout(CancellationToken cancellationToken)
     {
-        try
+        if (!TryGetUserId(out var userId))
         {
-            var userIdClaim = User.FindFirst(AuthConstants.Claims.UserId)?.Value;
-            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
-            {
-                return BadRequest(ApiResponse<bool>.Failure("Invalid user ID"));
-            }
-
-            _logger.LogInformation("Logout attempt for user ID: {UserId}", userId);
-
-            var result = await _authService.LogoutAsync(userId);
-
-            if (result.IsSuccess)
-            {
-                _logger.LogInformation("Successful logout for user ID: {UserId}", userId);
-                return Ok(result);
-            }
-
-            return BadRequest(result);
+            return BadRequest(ApiResponse<bool>.Failure("Invalid user ID"));
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error during logout");
-            return StatusCode(500, ApiResponse<bool>.Failure("An error occurred during logout"));
-        }
+
+        var result = await _authService.LogoutAsync(userId, cancellationToken);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
 
-    /// <summary>
-    /// Change user password
-    /// </summary>
-    /// <param name="changePasswordDto">Current and new password</param>
-    /// <returns>Success status</returns>
+    /// <summary>Changes the current user's password and revokes existing refresh tokens.</summary>
+    /// <param name="changePasswordDto">Current and new password.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     [HttpPost("change-password")]
     [Authorize(Policy = AuthConstants.Policies.AllRoles)]
     public async Task<ActionResult<ApiResponse<bool>>> ChangePassword(
-        [FromBody] ChangePasswordDto changePasswordDto
+        [FromBody] ChangePasswordDto changePasswordDto,
+        CancellationToken cancellationToken
     )
     {
-        try
+        if (!TryGetUserId(out var userId))
         {
-            var userIdClaim = User.FindFirst(AuthConstants.Claims.UserId)?.Value;
-            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
-            {
-                return BadRequest(ApiResponse<bool>.Failure("Invalid user ID"));
-            }
-
-            _logger.LogInformation("Password change attempt for user ID: {UserId}", userId);
-
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(
-                    ApiResponse<bool>.Failure(
-                        "Invalid request data",
-                        ModelState
-                            .Values.SelectMany(v => v.Errors.Select(e => e.ErrorMessage))
-                            .ToList()
-                    )
-                );
-            }
-
-            var result = await _authService.ChangePasswordAsync(userId, changePasswordDto);
-
-            if (result.IsSuccess)
-            {
-                _logger.LogInformation("Successful password change for user ID: {UserId}", userId);
-                return Ok(result);
-            }
-
-            return BadRequest(result);
+            return BadRequest(ApiResponse<bool>.Failure("Invalid user ID"));
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error during password change");
-            return StatusCode(
-                500,
-                ApiResponse<bool>.Failure("An error occurred during password change")
-            );
-        }
+
+        var result = await _authService.ChangePasswordAsync(
+            userId,
+            changePasswordDto,
+            cancellationToken
+        );
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
 
-    /// <summary>
-    /// Get current user information
-    /// </summary>
-    /// <returns>Current user details</returns>
+    /// <summary>Returns the identity claims of the authenticated caller.</summary>
     [HttpGet("me")]
     [Authorize(Policy = AuthConstants.Policies.AllRoles)]
-    public ActionResult<object> GetCurrentUser()
+    public ActionResult<ApiResponse<object>> GetCurrentUser()
     {
-        try
+        var claims = new
         {
-            var userClaims = new
-            {
-                UserId = User.FindFirst(AuthConstants.Claims.UserId)?.Value,
-                Email = User.FindFirst(AuthConstants.Claims.Email)?.Value,
-                Name = User.FindFirst(AuthConstants.Claims.Name)?.Value,
-                Role = User.FindFirst(AuthConstants.Claims.Role)?.Value,
-                IsAdmin = User.FindFirst(AuthConstants.Claims.IsAdmin)?.Value,
-                IsProvider = User.FindFirst(AuthConstants.Claims.IsProvider)?.Value,
-            };
+            UserId = User.FindFirst(AuthConstants.Claims.UserId)?.Value,
+            Email = User.FindFirst(AuthConstants.Claims.Email)?.Value,
+            Name = User.FindFirst(AuthConstants.Claims.Name)?.Value,
+            Role = User.FindFirst(AuthConstants.Claims.Role)?.Value,
+            IsAdmin = User.FindFirst(AuthConstants.Claims.IsAdmin)?.Value,
+            IsProvider = User.FindFirst(AuthConstants.Claims.IsProvider)?.Value,
+        };
 
-            return Ok(
-                ApiResponse<object>.Success(userClaims, "Current user information retrieved")
-            );
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving current user information");
-            return StatusCode(
-                500,
-                ApiResponse<object>.Failure("An error occurred while retrieving user information")
-            );
-        }
+        return Ok(ApiResponse<object>.Success(claims, "Current user information retrieved"));
     }
+
+    private bool TryGetUserId(out int userId) =>
+        int.TryParse(User.FindFirst(AuthConstants.Claims.UserId)?.Value, out userId);
 }

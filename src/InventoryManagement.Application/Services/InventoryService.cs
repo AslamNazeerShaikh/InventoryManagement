@@ -1,383 +1,322 @@
 using InventoryManagement.Application.Mapping;
 using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.DTOs;
+using InventoryManagement.Domain.Entities;
 using InventoryManagement.Domain.Enums;
 using InventoryManagement.Domain.Interfaces;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace InventoryManagement.Application.Services;
 
-public class InventoryService : IInventoryService
+/// <summary>Inventory catalogue service. Executes filtering, ordering and paging in SQL and keeps
+/// the available-quantity invariant consistent. Unexpected faults bubble to the global handler.</summary>
+public sealed class InventoryService : IInventoryService
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ILogger<InventoryService> _logger;
 
-    public InventoryService(IUnitOfWork unitOfWork)
+    /// <summary>Creates the inventory service.</summary>
+    public InventoryService(IUnitOfWork unitOfWork, ILogger<InventoryService> logger)
     {
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
 
-    public async Task<ApiResponse<IEnumerable<InventoryDto>>> GetAllInventoriesAsync()
+    /// <inheritdoc />
+    public async Task<ApiResponse<IEnumerable<InventoryDto>>> GetAllInventoriesAsync(
+        CancellationToken cancellationToken = default
+    )
     {
-        try
-        {
-            var inventories = await _unitOfWork.Inventories.GetAllAsync(x => x.CreatedByUser);
-            var inventoryDtos = inventories.ToDto();
-            return ApiResponse<IEnumerable<InventoryDto>>.Success(inventoryDtos);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<IEnumerable<InventoryDto>>.Failure(
-                $"Error retrieving inventories: {ex.Message}"
-            );
-        }
+        var inventories = await _unitOfWork
+            .Inventories.ListAsync(
+                include: q => q.Include(x => x.CreatedByUser),
+                orderBy: q => q.OrderBy(x => x.EquipmentName),
+                cancellationToken: cancellationToken
+            )
+            .ConfigureAwait(false);
+        return ApiResponse<IEnumerable<InventoryDto>>.Success(inventories.ToDto());
     }
 
-    public async Task<ApiResponse<InventoryDto>> GetInventoryByIdAsync(int id)
+    /// <inheritdoc />
+    public async Task<ApiResponse<InventoryDto>> GetInventoryByIdAsync(
+        int id,
+        CancellationToken cancellationToken = default
+    )
     {
-        try
-        {
-            var inventory = await _unitOfWork.Inventories.GetByIdAsync(id, x => x.CreatedByUser);
-            if (inventory == null)
-            {
-                return ApiResponse<InventoryDto>.Failure("Inventory not found");
-            }
-
-            return ApiResponse<InventoryDto>.Success(inventory.ToDto());
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<InventoryDto>.Failure($"Error retrieving inventory: {ex.Message}");
-        }
+        var inventory = await LoadWithCreatorAsync(id, cancellationToken).ConfigureAwait(false);
+        return inventory is null
+            ? ApiResponse<InventoryDto>.Failure("Inventory not found")
+            : ApiResponse<InventoryDto>.Success(inventory.ToDto());
     }
 
-    public async Task<ApiResponse<InventoryDto>> GetInventoryByBarcodeAsync(string barcode)
+    /// <inheritdoc />
+    public async Task<ApiResponse<InventoryDto>> GetInventoryByBarcodeAsync(
+        string barcode,
+        CancellationToken cancellationToken = default
+    )
     {
-        try
-        {
-            var inventory = await _unitOfWork.Inventories.GetByBarcodeAsync(barcode);
-            if (inventory == null)
-            {
-                return ApiResponse<InventoryDto>.Failure("Inventory not found");
-            }
-
-            return ApiResponse<InventoryDto>.Success(inventory.ToDto());
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<InventoryDto>.Failure($"Error retrieving inventory: {ex.Message}");
-        }
+        var inventory = await _unitOfWork.Inventories.GetByBarcodeAsync(barcode, cancellationToken)
+            .ConfigureAwait(false);
+        return inventory is null
+            ? ApiResponse<InventoryDto>.Failure("Inventory not found")
+            : ApiResponse<InventoryDto>.Success(inventory.ToDto());
     }
 
+    /// <inheritdoc />
     public async Task<ApiResponse<InventoryDto>> CreateInventoryAsync(
         CreateInventoryDto createInventoryDto,
-        int createdByUserId
+        int createdByUserId,
+        CancellationToken cancellationToken = default
     )
     {
-        try
+        if (
+            !string.IsNullOrEmpty(createInventoryDto.Barcode)
+            && await _unitOfWork
+                .Inventories.IsBarcodeExistsAsync(createInventoryDto.Barcode, cancellationToken)
+                .ConfigureAwait(false)
+        )
         {
-            // Validate barcode uniqueness if provided
-            if (
-                !string.IsNullOrEmpty(createInventoryDto.Barcode)
-                && await _unitOfWork.Inventories.IsBarcodeExistsAsync(createInventoryDto.Barcode)
-            )
-            {
-                return ApiResponse<InventoryDto>.Failure("Barcode already exists");
-            }
+            return ApiResponse<InventoryDto>.Failure("Barcode already exists");
+        }
 
-            // Validate serial number uniqueness if provided
-            if (
-                !string.IsNullOrEmpty(createInventoryDto.SerialNumber)
-                && await _unitOfWork.Inventories.IsSerialNumberExistsAsync(
-                    createInventoryDto.SerialNumber
+        if (
+            !string.IsNullOrEmpty(createInventoryDto.SerialNumber)
+            && await _unitOfWork
+                .Inventories.IsSerialNumberExistsAsync(
+                    createInventoryDto.SerialNumber,
+                    cancellationToken
                 )
-            )
-            {
-                return ApiResponse<InventoryDto>.Failure("Serial number already exists");
-            }
-
-            // Create inventory entity
-            var inventory = createInventoryDto.ToEntity();
-            inventory.CreatedByUserId = createdByUserId;
-            inventory.Status = InventoryStatus.Available;
-
-            // Add inventory
-            await _unitOfWork.Inventories.AddAsync(inventory);
-            await _unitOfWork.SaveAsync();
-
-            // Get the created inventory with user details
-            var createdInventory = await _unitOfWork.Inventories.GetByIdAsync(
-                inventory.Id,
-                x => x.CreatedByUser
-            );
-            return ApiResponse<InventoryDto>.Success(
-                createdInventory!.ToDto(),
-                "Inventory created successfully"
-            );
-        }
-        catch (Exception ex)
+                .ConfigureAwait(false)
+        )
         {
-            return ApiResponse<InventoryDto>.Failure($"Error creating inventory: {ex.Message}");
+            return ApiResponse<InventoryDto>.Failure("Serial number already exists");
         }
+
+        var inventory = createInventoryDto.ToEntity();
+        inventory.CreatedByUserId = createdByUserId;
+        inventory.Status = InventoryStatus.Available;
+
+        await _unitOfWork.Inventories.AddAsync(inventory, cancellationToken).ConfigureAwait(false);
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("Created inventory {InventoryId}.", inventory.Id);
+        var created = await LoadWithCreatorAsync(inventory.Id, cancellationToken)
+            .ConfigureAwait(false);
+        return ApiResponse<InventoryDto>.Success(created!.ToDto(), "Inventory created successfully");
     }
 
+    /// <inheritdoc />
     public async Task<ApiResponse<InventoryDto>> UpdateInventoryAsync(
         int id,
-        UpdateInventoryDto updateInventoryDto
+        UpdateInventoryDto updateInventoryDto,
+        CancellationToken cancellationToken = default
     )
     {
-        try
+        var inventory = await _unitOfWork.Inventories.GetByIdAsync(id, cancellationToken)
+            .ConfigureAwait(false);
+        if (inventory is null)
         {
-            var inventory = await _unitOfWork.Inventories.GetByIdAsync(id);
-            if (inventory == null)
-            {
-                return ApiResponse<InventoryDto>.Failure("Inventory not found");
-            }
+            return ApiResponse<InventoryDto>.Failure("Inventory not found");
+        }
 
-            // Validate barcode uniqueness if being changed
-            if (
-                !string.IsNullOrEmpty(updateInventoryDto.Barcode)
-                && inventory.Barcode != updateInventoryDto.Barcode
-                && await _unitOfWork.Inventories.IsBarcodeExistsAsync(updateInventoryDto.Barcode)
-            )
-            {
-                return ApiResponse<InventoryDto>.Failure("Barcode already exists");
-            }
+        if (
+            !string.IsNullOrEmpty(updateInventoryDto.Barcode)
+            && inventory.Barcode != updateInventoryDto.Barcode
+            && await _unitOfWork
+                .Inventories.IsBarcodeExistsAsync(updateInventoryDto.Barcode, cancellationToken)
+                .ConfigureAwait(false)
+        )
+        {
+            return ApiResponse<InventoryDto>.Failure("Barcode already exists");
+        }
 
-            // Validate serial number uniqueness if being changed
-            if (
-                !string.IsNullOrEmpty(updateInventoryDto.SerialNumber)
-                && inventory.SerialNumber != updateInventoryDto.SerialNumber
-                && await _unitOfWork.Inventories.IsSerialNumberExistsAsync(
-                    updateInventoryDto.SerialNumber
+        if (
+            !string.IsNullOrEmpty(updateInventoryDto.SerialNumber)
+            && inventory.SerialNumber != updateInventoryDto.SerialNumber
+            && await _unitOfWork
+                .Inventories.IsSerialNumberExistsAsync(
+                    updateInventoryDto.SerialNumber,
+                    cancellationToken
                 )
-            )
-            {
-                return ApiResponse<InventoryDto>.Failure("Serial number already exists");
-            }
-
-            // Calculate available quantity if total quantity is being updated
-            var quantityDifference = updateInventoryDto.Quantity - inventory.Quantity;
-            var newAvailableQuantity = inventory.AvailableQuantity + quantityDifference;
-
-            // Ensure available quantity is not negative
-            if (newAvailableQuantity < 0)
-            {
-                return ApiResponse<InventoryDto>.Failure(
-                    "Cannot reduce quantity below assigned amount"
-                );
-            }
-
-            // Update inventory
-            updateInventoryDto.UpdateEntity(inventory);
-            inventory.AvailableQuantity = newAvailableQuantity;
-
-            _unitOfWork.Inventories.Update(inventory);
-            await _unitOfWork.SaveAsync();
-
-            // Get updated inventory with user details
-            var updatedInventory = await _unitOfWork.Inventories.GetByIdAsync(
-                id,
-                x => x.CreatedByUser
-            );
-            return ApiResponse<InventoryDto>.Success(
-                updatedInventory!.ToDto(),
-                "Inventory updated successfully"
-            );
-        }
-        catch (Exception ex)
+                .ConfigureAwait(false)
+        )
         {
-            return ApiResponse<InventoryDto>.Failure($"Error updating inventory: {ex.Message}");
+            return ApiResponse<InventoryDto>.Failure("Serial number already exists");
         }
+
+        // Keep AvailableQuantity consistent with the total-quantity delta.
+        var quantityDifference = updateInventoryDto.Quantity - inventory.Quantity;
+        var newAvailableQuantity = inventory.AvailableQuantity + quantityDifference;
+        if (newAvailableQuantity < 0)
+        {
+            return ApiResponse<InventoryDto>.Failure("Cannot reduce quantity below assigned amount");
+        }
+
+        updateInventoryDto.UpdateEntity(inventory);
+        inventory.AvailableQuantity = newAvailableQuantity;
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("Updated inventory {InventoryId}.", id);
+        var updated = await LoadWithCreatorAsync(id, cancellationToken).ConfigureAwait(false);
+        return ApiResponse<InventoryDto>.Success(updated!.ToDto(), "Inventory updated successfully");
     }
 
-    public async Task<ApiResponse<bool>> DeleteInventoryAsync(int id)
+    /// <inheritdoc />
+    public async Task<ApiResponse<bool>> DeleteInventoryAsync(
+        int id,
+        CancellationToken cancellationToken = default
+    )
     {
-        try
+        var inventory = await _unitOfWork.Inventories.GetByIdAsync(id, cancellationToken)
+            .ConfigureAwait(false);
+        if (inventory is null)
         {
-            var inventory = await _unitOfWork.Inventories.GetByIdAsync(id);
-            if (inventory == null)
-            {
-                return ApiResponse<bool>.Failure("Inventory not found");
-            }
+            return ApiResponse<bool>.Failure("Inventory not found");
+        }
 
-            // Check if inventory has active assignments
-            if (
-                await _unitOfWork.InventoryAssignments.AnyAsync(x =>
-                    x.InventoryId == id && x.Status == AssignmentStatus.Active
-                )
+        var hasActiveAssignments = await _unitOfWork
+            .InventoryAssignments.AnyAsync(
+                x => x.InventoryId == id && x.Status == AssignmentStatus.Active,
+                cancellationToken
             )
-            {
-                return ApiResponse<bool>.Failure("Cannot delete inventory with active assignments");
-            }
-
-            // Soft delete
-            inventory.IsDeleted = true;
-            inventory.DeletedAt = DateTime.UtcNow;
-            _unitOfWork.Inventories.Update(inventory);
-            await _unitOfWork.SaveAsync();
-
-            return ApiResponse<bool>.Success(true, "Inventory deleted successfully");
-        }
-        catch (Exception ex)
+            .ConfigureAwait(false);
+        if (hasActiveAssignments)
         {
-            return ApiResponse<bool>.Failure($"Error deleting inventory: {ex.Message}");
+            return ApiResponse<bool>.Failure("Cannot delete inventory with active assignments");
         }
+
+        inventory.IsDeleted = true;
+        inventory.DeletedAt = DateTime.UtcNow;
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("Soft-deleted inventory {InventoryId}.", id);
+        return ApiResponse<bool>.Success(true, "Inventory deleted successfully");
     }
 
-    public async Task<ApiResponse<IEnumerable<InventoryDto>>> GetAvailableInventoriesAsync()
+    /// <inheritdoc />
+    public async Task<ApiResponse<IEnumerable<InventoryDto>>> GetAvailableInventoriesAsync(
+        CancellationToken cancellationToken = default
+    )
     {
-        try
-        {
-            var inventories = await _unitOfWork.Inventories.GetAvailableInventoriesAsync();
-            var inventoryDtos = inventories.ToDto();
-            return ApiResponse<IEnumerable<InventoryDto>>.Success(inventoryDtos);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<IEnumerable<InventoryDto>>.Failure(
-                $"Error retrieving available inventories: {ex.Message}"
-            );
-        }
+        var inventories = await _unitOfWork.Inventories.GetAvailableInventoriesAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return ApiResponse<IEnumerable<InventoryDto>>.Success(inventories.ToDto());
     }
 
+    /// <inheritdoc />
     public async Task<ApiResponse<IEnumerable<InventoryDto>>> GetExpiringInventoriesAsync(
-        int monthsBefore = 3
+        int monthsBefore = 3,
+        CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            var expiryDate = DateTime.UtcNow.AddMonths(monthsBefore);
-            var inventories = await _unitOfWork.Inventories.GetExpiringInventoriesAsync(expiryDate);
-            var inventoryDtos = inventories.ToDto();
-            return ApiResponse<IEnumerable<InventoryDto>>.Success(inventoryDtos);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<IEnumerable<InventoryDto>>.Failure(
-                $"Error retrieving expiring inventories: {ex.Message}"
-            );
-        }
+        var expiryDate = DateTime.UtcNow.AddMonths(monthsBefore);
+        var inventories = await _unitOfWork
+            .Inventories.GetExpiringInventoriesAsync(expiryDate, cancellationToken)
+            .ConfigureAwait(false);
+        return ApiResponse<IEnumerable<InventoryDto>>.Success(inventories.ToDto());
     }
 
+    /// <inheritdoc />
     public async Task<ApiResponse<IEnumerable<InventoryDto>>> GetLowStockInventoriesAsync(
-        int threshold = 5
+        int threshold = 5,
+        CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            var inventories = await _unitOfWork.Inventories.GetLowStockInventoriesAsync(threshold);
-            var inventoryDtos = inventories.ToDto();
-            return ApiResponse<IEnumerable<InventoryDto>>.Success(inventoryDtos);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<IEnumerable<InventoryDto>>.Failure(
-                $"Error retrieving low stock inventories: {ex.Message}"
-            );
-        }
+        var inventories = await _unitOfWork
+            .Inventories.GetLowStockInventoriesAsync(threshold, cancellationToken)
+            .ConfigureAwait(false);
+        return ApiResponse<IEnumerable<InventoryDto>>.Success(inventories.ToDto());
     }
 
+    /// <inheritdoc />
     public async Task<ApiResponse<IEnumerable<InventoryDto>>> SearchInventoriesAsync(
-        InventorySearchDto searchDto
+        InventorySearchDto searchDto,
+        CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            IEnumerable<Domain.Entities.Inventory> inventories;
+        var term = searchDto.SearchTerm;
+        var category = searchDto.Category;
+        var status = searchDto.Status;
+        var from = searchDto.ExpiryDateFrom;
+        var to = searchDto.ExpiryDateTo;
 
-            if (!string.IsNullOrEmpty(searchDto.SearchTerm))
-            {
-                inventories = await _unitOfWork.Inventories.SearchInventoriesAsync(
-                    searchDto.SearchTerm
-                );
-            }
-            else if (!string.IsNullOrEmpty(searchDto.Category))
-            {
-                inventories = await _unitOfWork.Inventories.GetInventoriesByCategoryAsync(
-                    searchDto.Category
-                );
-            }
-            else if (searchDto.Status.HasValue)
-            {
-                inventories = await _unitOfWork.Inventories.GetInventoriesByStatusAsync(
-                    searchDto.Status.Value
-                );
-            }
-            else
-            {
-                inventories = await _unitOfWork.Inventories.GetAllAsync(x => x.CreatedByUser);
-            }
-
-            // Apply additional filters
-            if (searchDto.ExpiryDateFrom.HasValue || searchDto.ExpiryDateTo.HasValue)
-            {
-                inventories = inventories.Where(x =>
+        // Single SQL query: all predicates translated server-side (no in-memory filtering).
+        var inventories = await _unitOfWork
+            .Inventories.ListAsync(
+                predicate: x =>
                     (
-                        !searchDto.ExpiryDateFrom.HasValue
-                        || (x.ExpiryDate.HasValue && x.ExpiryDate >= searchDto.ExpiryDateFrom)
+                        term == null
+                        || term == ""
+                        || x.EquipmentName.Contains(term)
+                        || (x.Description != null && x.Description.Contains(term))
+                        || (x.Category != null && x.Category.Contains(term))
+                        || (x.Brand != null && x.Brand.Contains(term))
+                        || (x.Model != null && x.Model.Contains(term))
+                        || (x.Barcode != null && x.Barcode.Contains(term))
+                        || (x.SerialNumber != null && x.SerialNumber.Contains(term))
                     )
-                    && (
-                        !searchDto.ExpiryDateTo.HasValue
-                        || (x.ExpiryDate.HasValue && x.ExpiryDate <= searchDto.ExpiryDateTo)
-                    )
-                );
-            }
+                    && (category == null || category == "" || x.Category == category)
+                    && (status == null || x.Status == status)
+                    && (from == null || (x.ExpiryDate != null && x.ExpiryDate >= from))
+                    && (to == null || (x.ExpiryDate != null && x.ExpiryDate <= to)),
+                include: q => q.Include(x => x.CreatedByUser),
+                orderBy: q => q.OrderBy(x => x.EquipmentName),
+                cancellationToken: cancellationToken
+            )
+            .ConfigureAwait(false);
 
-            var inventoryDtos = inventories.ToDto();
-            return ApiResponse<IEnumerable<InventoryDto>>.Success(inventoryDtos);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<IEnumerable<InventoryDto>>.Failure(
-                $"Error searching inventories: {ex.Message}"
-            );
-        }
+        return ApiResponse<IEnumerable<InventoryDto>>.Success(inventories.ToDto());
     }
 
+    /// <inheritdoc />
     public async Task<ApiResponse<PagedResult<InventoryDto>>> GetInventoriesPagedAsync(
         int pageNumber,
-        int pageSize
+        int pageSize,
+        CancellationToken cancellationToken = default
     )
     {
-        try
+        pageSize = Math.Clamp(pageSize, 1, BusinessConstants.Pagination.MaxPageSize);
+
+        var page = await _unitOfWork
+            .Inventories.GetPagedAsync(
+                pageNumber,
+                pageSize,
+                orderBy: q => q.OrderByDescending(x => x.CreatedAt),
+                include: q => q.Include(x => x.CreatedByUser),
+                cancellationToken: cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        var result = new PagedResult<InventoryDto>
         {
-            pageSize = Math.Min(pageSize, BusinessConstants.Pagination.MaxPageSize);
+            Data = page.Items.ToDto(),
+            TotalCount = page.TotalCount,
+            PageNumber = pageNumber,
+            PageSize = pageSize,
+        };
 
-            var inventories = await _unitOfWork.Inventories.GetPagedAsync(pageNumber, pageSize);
-            var totalCount = await _unitOfWork.Inventories.CountAsync();
-
-            var pagedResult = new PagedResult<InventoryDto>
-            {
-                Data = inventories.ToDto(),
-                TotalCount = totalCount,
-                PageNumber = pageNumber,
-                PageSize = pageSize,
-            };
-
-            return ApiResponse<PagedResult<InventoryDto>>.Success(pagedResult);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<PagedResult<InventoryDto>>.Failure(
-                $"Error retrieving paged inventories: {ex.Message}"
-            );
-        }
+        return ApiResponse<PagedResult<InventoryDto>>.Success(result);
     }
 
+    /// <inheritdoc />
     public async Task<ApiResponse<IEnumerable<InventoryDto>>> GetInventoriesByCategoryAsync(
-        string category
+        string category,
+        CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            var inventories = await _unitOfWork.Inventories.GetInventoriesByCategoryAsync(category);
-            var inventoryDtos = inventories.ToDto();
-            return ApiResponse<IEnumerable<InventoryDto>>.Success(inventoryDtos);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<IEnumerable<InventoryDto>>.Failure(
-                $"Error retrieving inventories by category: {ex.Message}"
-            );
-        }
+        var inventories = await _unitOfWork
+            .Inventories.GetInventoriesByCategoryAsync(category, cancellationToken)
+            .ConfigureAwait(false);
+        return ApiResponse<IEnumerable<InventoryDto>>.Success(inventories.ToDto());
     }
+
+    /// <summary>Loads a single inventory item (tracking-free) with its creator navigation for projection.</summary>
+    private Task<Inventory?> LoadWithCreatorAsync(int id, CancellationToken cancellationToken) =>
+        _unitOfWork.Inventories.FirstOrDefaultAsync(
+            x => x.Id == id,
+            include: q => q.Include(i => i.CreatedByUser),
+            cancellationToken: cancellationToken
+        );
 }

@@ -6,113 +6,126 @@ using Microsoft.EntityFrameworkCore;
 
 namespace InventoryManagement.Infrastructure.Repositories;
 
+/// <summary>EF Core repository for <see cref="Inventory"/> with catalogue-oriented queries.</summary>
 public class InventoryRepository : GenericRepository<Inventory>, IInventoryRepository
 {
-    private readonly AppDbContext _appDbContext;
-
+    /// <summary>Creates the repository.</summary>
     public InventoryRepository(AppDbContext appDbContext)
-        : base(appDbContext)
-    {
-        _appDbContext = appDbContext;
-    }
+        : base(appDbContext) { }
 
-    public async Task<Inventory?> GetByBarcodeAsync(string barcode)
-    {
-        return await _appDbContext.Inventories.FirstOrDefaultAsync(x => x.Barcode == barcode);
-    }
+    /// <inheritdoc />
+    public async Task<Inventory?> GetByBarcodeAsync(
+        string barcode,
+        CancellationToken cancellationToken = default
+    ) =>
+        await EntitySet
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Barcode == barcode, cancellationToken)
+            .ConfigureAwait(false);
 
-    public async Task<IEnumerable<Inventory>> GetExpiringInventoriesAsync(DateTime beforeDate)
-    {
-        return await _appDbContext
-            .Inventories.Where(x =>
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Inventory>> GetExpiringInventoriesAsync(
+        DateTime beforeDate,
+        CancellationToken cancellationToken = default
+    ) =>
+        await EntitySet
+            .AsNoTracking()
+            .Where(x =>
                 x.ExpiryDate.HasValue
                 && x.ExpiryDate <= beforeDate
                 && x.Status == InventoryStatus.Available
             )
             .Include(x => x.CreatedByUser)
             .OrderBy(x => x.ExpiryDate)
-            .ToListAsync();
-    }
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 
-    public async Task<IEnumerable<Inventory>> GetAvailableInventoriesAsync()
-    {
-        return await _appDbContext
-            .Inventories.Where(x =>
-                x.Status == InventoryStatus.Available && x.AvailableQuantity > 0
-            )
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Inventory>> GetAvailableInventoriesAsync(
+        CancellationToken cancellationToken = default
+    ) =>
+        await EntitySet
+            .AsNoTracking()
+            .Where(x => x.Status == InventoryStatus.Available && x.AvailableQuantity > 0)
             .Include(x => x.CreatedByUser)
             .OrderBy(x => x.EquipmentName)
-            .ToListAsync();
-    }
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 
-    public async Task<IEnumerable<Inventory>> GetInventoriesByStatusAsync(InventoryStatus status)
-    {
-        return await _appDbContext
-            .Inventories.Where(x => x.Status == status)
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Inventory>> GetInventoriesByStatusAsync(
+        InventoryStatus status,
+        CancellationToken cancellationToken = default
+    ) =>
+        await EntitySet
+            .AsNoTracking()
+            .Where(x => x.Status == status)
             .Include(x => x.CreatedByUser)
             .OrderBy(x => x.EquipmentName)
-            .ToListAsync();
-    }
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 
-    public async Task<IEnumerable<Inventory>> GetInventoriesByCategoryAsync(string category)
-    {
-        return await _appDbContext
-            .Inventories.Where(x => x.Category == category)
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Inventory>> GetInventoriesByCategoryAsync(
+        string category,
+        CancellationToken cancellationToken = default
+    ) =>
+        await EntitySet
+            .AsNoTracking()
+            .Where(x => x.Category == category)
             .Include(x => x.CreatedByUser)
             .OrderBy(x => x.EquipmentName)
-            .ToListAsync();
-    }
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 
-    public async Task<IEnumerable<Inventory>> SearchInventoriesAsync(string searchTerm)
-    {
-        return await _appDbContext
-            .Inventories.Where(x =>
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Inventory>> SearchInventoriesAsync(
+        string searchTerm,
+        CancellationToken cancellationToken = default
+    ) =>
+        await EntitySet
+            .AsNoTracking()
+            .Where(x =>
                 x.EquipmentName.Contains(searchTerm)
-                || x.Description!.Contains(searchTerm)
-                || x.Category!.Contains(searchTerm)
-                || x.Brand!.Contains(searchTerm)
-                || x.Model!.Contains(searchTerm)
-                || x.Barcode!.Contains(searchTerm)
-                || x.SerialNumber!.Contains(searchTerm)
+                || (x.Description != null && x.Description.Contains(searchTerm))
+                || (x.Category != null && x.Category.Contains(searchTerm))
+                || (x.Brand != null && x.Brand.Contains(searchTerm))
+                || (x.Model != null && x.Model.Contains(searchTerm))
+                || (x.Barcode != null && x.Barcode.Contains(searchTerm))
+                || (x.SerialNumber != null && x.SerialNumber.Contains(searchTerm))
             )
             .Include(x => x.CreatedByUser)
             .OrderBy(x => x.EquipmentName)
-            .ToListAsync();
-    }
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 
-    public async Task<bool> IsBarcodeExistsAsync(string barcode)
-    {
-        return await _appDbContext.Inventories.AnyAsync(x => x.Barcode == barcode);
-    }
+    /// <inheritdoc />
+    public async Task<bool> IsBarcodeExistsAsync(
+        string barcode,
+        CancellationToken cancellationToken = default
+    ) => await EntitySet.AnyAsync(x => x.Barcode == barcode, cancellationToken).ConfigureAwait(false);
 
-    public async Task<bool> IsSerialNumberExistsAsync(string serialNumber)
-    {
-        return await _appDbContext.Inventories.AnyAsync(x => x.SerialNumber == serialNumber);
-    }
+    /// <inheritdoc />
+    public async Task<bool> IsSerialNumberExistsAsync(
+        string serialNumber,
+        CancellationToken cancellationToken = default
+    ) =>
+        await EntitySet
+            .AnyAsync(x => x.SerialNumber == serialNumber, cancellationToken)
+            .ConfigureAwait(false);
 
-    public async Task<IEnumerable<Inventory>> GetLowStockInventoriesAsync(int threshold = 5)
-    {
-        return await _appDbContext
-            .Inventories.Where(x =>
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Inventory>> GetLowStockInventoriesAsync(
+        int threshold = 5,
+        CancellationToken cancellationToken = default
+    ) =>
+        await EntitySet
+            .AsNoTracking()
+            .Where(x =>
                 x.AvailableQuantity <= threshold && x.Status == InventoryStatus.Available
             )
             .Include(x => x.CreatedByUser)
             .OrderBy(x => x.AvailableQuantity)
-            .ToListAsync();
-    }
-
-    public async Task UpdateQuantityAsync(
-        int inventoryId,
-        int newQuantity,
-        int newAvailableQuantity
-    )
-    {
-        var inventory = await _appDbContext.Inventories.FindAsync(inventoryId);
-        if (inventory != null)
-        {
-            inventory.Quantity = newQuantity;
-            inventory.AvailableQuantity = newAvailableQuantity;
-            _appDbContext.Inventories.Update(inventory);
-        }
-    }
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 }

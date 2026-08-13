@@ -1,83 +1,86 @@
+using InventoryManagement.Domain.Exceptions;
 using InventoryManagement.Domain.Interfaces;
 using InventoryManagement.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore;
 
 namespace InventoryManagement.Infrastructure.Repositories;
 
-public class UnitOfWork : IUnitOfWork
+/// <summary>
+/// Default <see cref="IUnitOfWork"/>. Repositories are injected (single DI wiring) and share the
+/// scoped <see cref="AppDbContext"/>. Transactions are managed via the provider execution strategy
+/// so partial writes and leaked transaction resources cannot occur. The context is owned by the
+/// container, so this type intentionally does not dispose it.
+/// </summary>
+public sealed class UnitOfWork : IUnitOfWork
 {
     private readonly AppDbContext _dbContext;
-    private IDbContextTransaction? _transaction;
-    private bool _disposed = false;
 
-    public UnitOfWork(AppDbContext dbContext)
+    /// <summary>Creates the unit of work over the shared context and repositories.</summary>
+    public UnitOfWork(
+        AppDbContext dbContext,
+        IUserRepository users,
+        IInventoryRepository inventories,
+        IInventoryAssignmentRepository inventoryAssignments
+    )
     {
         _dbContext = dbContext;
-        Users = new UserRepository(dbContext);
-        Inventories = new InventoryRepository(dbContext);
-        InventoryAssignments = new InventoryAssignmentRepository(dbContext);
+        Users = users;
+        Inventories = inventories;
+        InventoryAssignments = inventoryAssignments;
     }
 
+    /// <inheritdoc />
     public IUserRepository Users { get; }
+
+    /// <inheritdoc />
     public IInventoryRepository Inventories { get; }
+
+    /// <inheritdoc />
     public IInventoryAssignmentRepository InventoryAssignments { get; }
 
-    public async Task<int> SaveAsync()
+    /// <inheritdoc />
+    public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        return await _dbContext.SaveChangesAsync();
-    }
-
-    public async Task<int> SaveAsync(CancellationToken cancellationToken)
-    {
-        return await _dbContext.SaveChangesAsync(cancellationToken);
-    }
-
-    public void Rollback()
-    {
-        _dbContext.ChangeTracker.Entries().ToList().ForEach(x => x.Reload());
-    }
-
-    public async Task BeginTransactionAsync()
-    {
-        _transaction = await _dbContext.Database.BeginTransactionAsync();
-    }
-
-    public async Task CommitTransactionAsync()
-    {
-        if (_transaction != null)
+        try
         {
-            await _transaction.CommitAsync();
-            await _transaction.DisposeAsync();
-            _transaction = null;
+            return await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            var entityName = ex.Entries.Count > 0
+                ? ex.Entries[0].Entity.GetType().Name
+                : "record";
+            throw new ConcurrencyConflictException(entityName);
         }
     }
 
-    public async Task RollbackTransactionAsync()
+    /// <inheritdoc />
+    public async Task<TResult> ExecuteInTransactionAsync<TResult>(
+        Func<CancellationToken, Task<TResult>> operation,
+        CancellationToken cancellationToken = default
+    )
     {
-        if (_transaction != null)
-        {
-            await _transaction.RollbackAsync();
-            await _transaction.DisposeAsync();
-            _transaction = null;
-        }
-    }
+        ArgumentNullException.ThrowIfNull(operation);
 
-    protected virtual void Dispose(bool disposing)
-    {
-        if (!_disposed)
-        {
-            if (disposing)
+        var strategy = _dbContext.Database.CreateExecutionStrategy();
+        return await strategy
+            .ExecuteAsync(async () =>
             {
-                _transaction?.Dispose();
-                _dbContext.Dispose();
-            }
-        }
-        _disposed = true;
-    }
-
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
+                await using var transaction = await _dbContext
+                    .Database.BeginTransactionAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                try
+                {
+                    var result = await operation(cancellationToken).ConfigureAwait(false);
+                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    return result;
+                }
+                catch
+                {
+                    await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                    throw;
+                }
+            })
+            .ConfigureAwait(false);
     }
 }

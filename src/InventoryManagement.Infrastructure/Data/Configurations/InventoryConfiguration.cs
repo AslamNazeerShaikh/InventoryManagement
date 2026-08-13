@@ -5,8 +5,10 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace InventoryManagement.Infrastructure.Data.Configurations;
 
+/// <summary>EF Core mapping for <see cref="Inventory"/>: constraints, unique filtered indexes and soft-delete filter.</summary>
 public class InventoryConfiguration : IEntityTypeConfiguration<Inventory>
 {
+    /// <inheritdoc />
     public void Configure(EntityTypeBuilder<Inventory> builder)
     {
         builder.ToTable("Inventories");

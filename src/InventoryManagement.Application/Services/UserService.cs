@@ -2,211 +2,188 @@ using InventoryManagement.Application.Mapping;
 using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.DTOs;
 using InventoryManagement.Domain.Interfaces;
+using InventoryManagement.Domain.Security;
+using Microsoft.Extensions.Logging;
 
 namespace InventoryManagement.Application.Services;
 
-public class UserService : IUserService
+/// <summary>User management service. Persists credentials only as Microsoft PBKDF2 hashes and
+/// enforces email uniqueness. Unexpected faults propagate to the global exception handler.</summary>
+public sealed class UserService : IUserService
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IPasswordHasher _passwordHasher;
+    private readonly ILogger<UserService> _logger;
 
-    public UserService(IUnitOfWork unitOfWork)
-    {
-        _unitOfWork = unitOfWork;
-    }
-
-    public async Task<ApiResponse<IEnumerable<UserDto>>> GetAllUsersAsync()
-    {
-        try
-        {
-            var users = await _unitOfWork.Users.GetAllAsync();
-            var userDtos = users.ToDto();
-            return ApiResponse<IEnumerable<UserDto>>.Success(userDtos);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<IEnumerable<UserDto>>.Failure(
-                $"Error retrieving users: {ex.Message}"
-            );
-        }
-    }
-
-    public async Task<ApiResponse<UserDto>> GetUserByIdAsync(int id)
-    {
-        try
-        {
-            var user = await _unitOfWork.Users.GetByIdAsync(id);
-            if (user == null)
-            {
-                return ApiResponse<UserDto>.Failure("User not found");
-            }
-
-            return ApiResponse<UserDto>.Success(user.ToDto());
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<UserDto>.Failure($"Error retrieving user: {ex.Message}");
-        }
-    }
-
-    public async Task<ApiResponse<UserDto>> GetUserByEmailAsync(string email)
-    {
-        try
-        {
-            var user = await _unitOfWork.Users.GetByEmailAsync(email);
-            if (user == null)
-            {
-                return ApiResponse<UserDto>.Failure("User not found");
-            }
-
-            return ApiResponse<UserDto>.Success(user.ToDto());
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<UserDto>.Failure($"Error retrieving user: {ex.Message}");
-        }
-    }
-
-    public async Task<ApiResponse<UserDto>> CreateUserAsync(CreateUserDto createUserDto)
-    {
-        try
-        {
-            // Validate email uniqueness
-            if (await _unitOfWork.Users.IsEmailExistsAsync(createUserDto.Email))
-            {
-                return ApiResponse<UserDto>.Failure("Email already exists");
-            }
-
-            // Create user entity
-            var user = createUserDto.ToEntity();
-            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(createUserDto.Password);
-
-            // Add user
-            await _unitOfWork.Users.AddAsync(user);
-            await _unitOfWork.SaveAsync();
-
-            return ApiResponse<UserDto>.Success(user.ToDto(), "User created successfully");
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<UserDto>.Failure($"Error creating user: {ex.Message}");
-        }
-    }
-
-    public async Task<ApiResponse<UserDto>> UpdateUserAsync(int id, UpdateUserDto updateUserDto)
-    {
-        try
-        {
-            var user = await _unitOfWork.Users.GetByIdAsync(id);
-            if (user == null)
-            {
-                return ApiResponse<UserDto>.Failure("User not found");
-            }
-
-            // Check if email is being changed and is unique
-            if (
-                user.Email != updateUserDto.Email
-                && await _unitOfWork.Users.IsEmailExistsAsync(updateUserDto.Email)
-            )
-            {
-                return ApiResponse<UserDto>.Failure("Email already exists");
-            }
-
-            // Update user
-            updateUserDto.UpdateEntity(user);
-            _unitOfWork.Users.Update(user);
-            await _unitOfWork.SaveAsync();
-
-            return ApiResponse<UserDto>.Success(user.ToDto(), "User updated successfully");
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<UserDto>.Failure($"Error updating user: {ex.Message}");
-        }
-    }
-
-    public async Task<ApiResponse<bool>> DeleteUserAsync(int id)
-    {
-        try
-        {
-            var user = await _unitOfWork.Users.GetByIdAsync(id);
-            if (user == null)
-            {
-                return ApiResponse<bool>.Failure("User not found");
-            }
-
-            // Soft delete
-            user.IsDeleted = true;
-            user.DeletedAt = DateTime.UtcNow;
-            _unitOfWork.Users.Update(user);
-            await _unitOfWork.SaveAsync();
-
-            return ApiResponse<bool>.Success(true, "User deleted successfully");
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<bool>.Failure($"Error deleting user: {ex.Message}");
-        }
-    }
-
-    public async Task<ApiResponse<IEnumerable<UserDto>>> GetNursePractitionersAsync()
-    {
-        try
-        {
-            var nurses = await _unitOfWork.Users.GetNursePractitionersAsync();
-            var nurseDtos = nurses.ToDto();
-            return ApiResponse<IEnumerable<UserDto>>.Success(nurseDtos);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<IEnumerable<UserDto>>.Failure(
-                $"Error retrieving nurse practitioners: {ex.Message}"
-            );
-        }
-    }
-
-    public async Task<ApiResponse<IEnumerable<UserDto>>> GetActiveUsersAsync()
-    {
-        try
-        {
-            var users = await _unitOfWork.Users.GetActiveUsersAsync();
-            var userDtos = users.ToDto();
-            return ApiResponse<IEnumerable<UserDto>>.Success(userDtos);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<IEnumerable<UserDto>>.Failure(
-                $"Error retrieving active users: {ex.Message}"
-            );
-        }
-    }
-
-    public async Task<ApiResponse<PagedResult<UserDto>>> GetUsersPagedAsync(
-        int pageNumber,
-        int pageSize
+    /// <summary>Creates the user service.</summary>
+    public UserService(
+        IUnitOfWork unitOfWork,
+        IPasswordHasher passwordHasher,
+        ILogger<UserService> logger
     )
     {
-        try
+        _unitOfWork = unitOfWork;
+        _passwordHasher = passwordHasher;
+        _logger = logger;
+    }
+
+    /// <inheritdoc />
+    public async Task<ApiResponse<IEnumerable<UserDto>>> GetAllUsersAsync(
+        CancellationToken cancellationToken = default
+    )
+    {
+        var users = await _unitOfWork
+            .Users.ListAsync(orderBy: q => q.OrderBy(u => u.Name), cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        return ApiResponse<IEnumerable<UserDto>>.Success(users.ToDto());
+    }
+
+    /// <inheritdoc />
+    public async Task<ApiResponse<UserDto>> GetUserByIdAsync(
+        int id,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var user = await _unitOfWork.Users.GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
+        return user is null
+            ? ApiResponse<UserDto>.Failure("User not found")
+            : ApiResponse<UserDto>.Success(user.ToDto());
+    }
+
+    /// <inheritdoc />
+    public async Task<ApiResponse<UserDto>> GetUserByEmailAsync(
+        string email,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var user = await _unitOfWork.Users.GetByEmailAsync(email, cancellationToken)
+            .ConfigureAwait(false);
+        return user is null
+            ? ApiResponse<UserDto>.Failure("User not found")
+            : ApiResponse<UserDto>.Success(user.ToDto());
+    }
+
+    /// <inheritdoc />
+    public async Task<ApiResponse<UserDto>> CreateUserAsync(
+        CreateUserDto createUserDto,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (
+            await _unitOfWork
+                .Users.IsEmailExistsAsync(createUserDto.Email, cancellationToken)
+                .ConfigureAwait(false)
+        )
         {
-            pageSize = Math.Min(pageSize, BusinessConstants.Pagination.MaxPageSize);
-
-            var users = await _unitOfWork.Users.GetPagedAsync(pageNumber, pageSize);
-            var totalCount = await _unitOfWork.Users.CountAsync();
-
-            var pagedResult = new PagedResult<UserDto>
-            {
-                Data = users.ToDto(),
-                TotalCount = totalCount,
-                PageNumber = pageNumber,
-                PageSize = pageSize,
-            };
-
-            return ApiResponse<PagedResult<UserDto>>.Success(pagedResult);
+            return ApiResponse<UserDto>.Failure("Email already exists");
         }
-        catch (Exception ex)
+
+        var user = createUserDto.ToEntity();
+        user.PasswordHash = _passwordHasher.Hash(createUserDto.Password);
+
+        await _unitOfWork.Users.AddAsync(user, cancellationToken).ConfigureAwait(false);
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("Created user {UserId} ({Email}).", user.Id, user.Email);
+        return ApiResponse<UserDto>.Success(user.ToDto(), "User created successfully");
+    }
+
+    /// <inheritdoc />
+    public async Task<ApiResponse<UserDto>> UpdateUserAsync(
+        int id,
+        UpdateUserDto updateUserDto,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var user = await _unitOfWork.Users.GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
+        if (user is null)
         {
-            return ApiResponse<PagedResult<UserDto>>.Failure(
-                $"Error retrieving paged users: {ex.Message}"
-            );
+            return ApiResponse<UserDto>.Failure("User not found");
         }
+
+        if (
+            user.Email != updateUserDto.Email
+            && await _unitOfWork
+                .Users.IsEmailExistsAsync(updateUserDto.Email, cancellationToken)
+                .ConfigureAwait(false)
+        )
+        {
+            return ApiResponse<UserDto>.Failure("Email already exists");
+        }
+
+        updateUserDto.UpdateEntity(user);
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("Updated user {UserId}.", id);
+        return ApiResponse<UserDto>.Success(user.ToDto(), "User updated successfully");
+    }
+
+    /// <inheritdoc />
+    public async Task<ApiResponse<bool>> DeleteUserAsync(
+        int id,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var user = await _unitOfWork.Users.GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
+        if (user is null)
+        {
+            return ApiResponse<bool>.Failure("User not found");
+        }
+
+        user.IsDeleted = true;
+        user.DeletedAt = DateTime.UtcNow;
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("Soft-deleted user {UserId}.", id);
+        return ApiResponse<bool>.Success(true, "User deleted successfully");
+    }
+
+    /// <inheritdoc />
+    public async Task<ApiResponse<IEnumerable<UserDto>>> GetNursePractitionersAsync(
+        CancellationToken cancellationToken = default
+    )
+    {
+        var nurses = await _unitOfWork.Users.GetNursePractitionersAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return ApiResponse<IEnumerable<UserDto>>.Success(nurses.ToDto());
+    }
+
+    /// <inheritdoc />
+    public async Task<ApiResponse<IEnumerable<UserDto>>> GetActiveUsersAsync(
+        CancellationToken cancellationToken = default
+    )
+    {
+        var users = await _unitOfWork.Users.GetActiveUsersAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return ApiResponse<IEnumerable<UserDto>>.Success(users.ToDto());
+    }
+
+    /// <inheritdoc />
+    public async Task<ApiResponse<PagedResult<UserDto>>> GetUsersPagedAsync(
+        int pageNumber,
+        int pageSize,
+        CancellationToken cancellationToken = default
+    )
+    {
+        pageSize = Math.Clamp(pageSize, 1, BusinessConstants.Pagination.MaxPageSize);
+
+        var page = await _unitOfWork
+            .Users.GetPagedAsync(
+                pageNumber,
+                pageSize,
+                orderBy: q => q.OrderByDescending(u => u.CreatedAt),
+                cancellationToken: cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        var result = new PagedResult<UserDto>
+        {
+            Data = page.Items.ToDto(),
+            TotalCount = page.TotalCount,
+            PageNumber = pageNumber,
+            PageSize = pageSize,
+        };
+
+        return ApiResponse<PagedResult<UserDto>>.Success(result);
     }
 }

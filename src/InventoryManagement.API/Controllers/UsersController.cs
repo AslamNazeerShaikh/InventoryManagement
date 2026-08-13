@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace InventoryManagement.API.Controllers;
 
+/// <summary>User management endpoints. Administrative operations are restricted; users may view and
+/// update their own profile. Role/admin flags cannot be self-escalated.</summary>
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
@@ -15,367 +17,148 @@ public class UsersController : ControllerBase
     private readonly IUserService _userService;
     private readonly ILogger<UsersController> _logger;
 
+    /// <summary>Creates the controller.</summary>
     public UsersController(IUserService userService, ILogger<UsersController> logger)
     {
         _userService = userService;
         _logger = logger;
     }
 
-    /// <summary>
-    /// Get all users (Admin only)
-    /// </summary>
-    /// <returns>List of all users</returns>
+    /// <summary>Lists all users (Admin only).</summary>
     [HttpGet]
     [Authorize(Policy = AuthConstants.Policies.AdminOnly)]
-    public async Task<ActionResult<ApiResponse<IEnumerable<UserDto>>>> GetAllUsers()
-    {
-        try
-        {
-            _logger.LogInformation("Admin requesting all users");
-            var result = await _userService.GetAllUsersAsync();
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving all users");
-            return StatusCode(
-                500,
-                ApiResponse<IEnumerable<UserDto>>.Failure(
-                    "An error occurred while retrieving users"
-                )
-            );
-        }
-    }
+    public async Task<ActionResult<ApiResponse<IEnumerable<UserDto>>>> GetAllUsers(
+        CancellationToken cancellationToken
+    ) => Ok(await _userService.GetAllUsersAsync(cancellationToken));
 
-    /// <summary>
-    /// Get users with pagination (Admin only)
-    /// </summary>
-    /// <param name="pageNumber">Page number (default: 1)</param>
-    /// <param name="pageSize">Page size (default: 10, max: 100)</param>
-    /// <returns>Paginated list of users</returns>
+    /// <summary>Lists users with pagination (Admin only).</summary>
     [HttpGet("paged")]
     [Authorize(Policy = AuthConstants.Policies.AdminOnly)]
     public async Task<ActionResult<ApiResponse<PagedResult<UserDto>>>> GetUsersPaged(
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 10
+        [FromQuery] int pageSize = 10,
+        CancellationToken cancellationToken = default
+    ) => Ok(await _userService.GetUsersPagedAsync(pageNumber, pageSize, cancellationToken));
+
+    /// <summary>Gets a user by identifier (Admin, or the caller's own profile).</summary>
+    [HttpGet("{id:int}")]
+    public async Task<ActionResult<ApiResponse<UserDto>>> GetUserById(
+        int id,
+        CancellationToken cancellationToken
     )
     {
-        try
+        if (!TryGetCallerId(out var currentUserId))
         {
-            if (pageSize > BusinessConstants.Pagination.MaxPageSize)
-                pageSize = BusinessConstants.Pagination.MaxPageSize;
+            return BadRequest(ApiResponse<UserDto>.Failure("Invalid user ID in token"));
+        }
 
-            _logger.LogInformation(
-                "Admin requesting users page {PageNumber} with size {PageSize}",
-                pageNumber,
-                pageSize
-            );
-            var result = await _userService.GetUsersPagedAsync(pageNumber, pageSize);
-            return Ok(result);
-        }
-        catch (Exception ex)
+        if (!IsAdmin() && currentUserId != id)
         {
-            _logger.LogError(ex, "Error retrieving paged users");
-            return StatusCode(
-                500,
-                ApiResponse<PagedResult<UserDto>>.Failure(
-                    "An error occurred while retrieving users"
-                )
-            );
+            return Forbid();
         }
+
+        var result = await _userService.GetUserByIdAsync(id, cancellationToken);
+        return result.IsSuccess ? Ok(result) : NotFound(result);
     }
 
-    /// <summary>
-    /// Get user by ID (Admin or own profile)
-    /// </summary>
-    /// <param name="id">User ID</param>
-    /// <returns>User details</returns>
-    [HttpGet("{id:int}")]
-    public async Task<ActionResult<ApiResponse<UserDto>>> GetUserById(int id)
-    {
-        try
-        {
-            var currentUserIdClaim = User.FindFirst(AuthConstants.Claims.UserId)?.Value;
-            var isAdmin = User.FindFirst(AuthConstants.Claims.IsAdmin)?.Value == "True";
-
-            if (!int.TryParse(currentUserIdClaim, out int currentUserId))
-            {
-                return BadRequest(ApiResponse<UserDto>.Failure("Invalid user ID in token"));
-            }
-
-            // Allow access if user is admin or requesting their own profile
-            if (!isAdmin && currentUserId != id)
-            {
-                return Forbid();
-            }
-
-            _logger.LogInformation(
-                "User {CurrentUserId} requesting user {RequestedUserId}",
-                currentUserId,
-                id
-            );
-            var result = await _userService.GetUserByIdAsync(id);
-
-            if (!result.IsSuccess)
-            {
-                return NotFound(result);
-            }
-
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving user {UserId}", id);
-            return StatusCode(
-                500,
-                ApiResponse<UserDto>.Failure("An error occurred while retrieving user")
-            );
-        }
-    }
-
-    /// <summary>
-    /// Get user by email (Admin only)
-    /// </summary>
-    /// <param name="email">User email</param>
-    /// <returns>User details</returns>
+    /// <summary>Gets a user by email (Admin only).</summary>
     [HttpGet("by-email/{email}")]
     [Authorize(Policy = AuthConstants.Policies.AdminOnly)]
-    public async Task<ActionResult<ApiResponse<UserDto>>> GetUserByEmail(string email)
+    public async Task<ActionResult<ApiResponse<UserDto>>> GetUserByEmail(
+        string email,
+        CancellationToken cancellationToken
+    )
     {
-        try
-        {
-            _logger.LogInformation("Admin requesting user by email: {Email}", email);
-            var result = await _userService.GetUserByEmailAsync(email);
-
-            if (!result.IsSuccess)
-            {
-                return NotFound(result);
-            }
-
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving user by email: {Email}", email);
-            return StatusCode(
-                500,
-                ApiResponse<UserDto>.Failure("An error occurred while retrieving user")
-            );
-        }
+        var result = await _userService.GetUserByEmailAsync(email, cancellationToken);
+        return result.IsSuccess ? Ok(result) : NotFound(result);
     }
 
-    /// <summary>
-    /// Create new user (Admin only)
-    /// </summary>
-    /// <param name="createUserDto">User creation data</param>
-    /// <returns>Created user details</returns>
+    /// <summary>Creates a new user (Admin only).</summary>
     [HttpPost]
     [Authorize(Policy = AuthConstants.Policies.AdminOnly)]
     public async Task<ActionResult<ApiResponse<UserDto>>> CreateUser(
-        [FromBody] CreateUserDto createUserDto
+        [FromBody] CreateUserDto createUserDto,
+        CancellationToken cancellationToken
     )
     {
-        try
+        var result = await _userService.CreateUserAsync(createUserDto, cancellationToken);
+        if (!result.IsSuccess)
         {
-            _logger.LogInformation("Admin creating user with email: {Email}", createUserDto.Email);
-
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(
-                    ApiResponse<UserDto>.Failure(
-                        "Invalid request data",
-                        ModelState
-                            .Values.SelectMany(v => v.Errors.Select(e => e.ErrorMessage))
-                            .ToList()
-                    )
-                );
-            }
-
-            var result = await _userService.CreateUserAsync(createUserDto);
-
-            if (!result.IsSuccess)
-            {
-                return BadRequest(result);
-            }
-
-            _logger.LogInformation("Successfully created user: {Email}", createUserDto.Email);
-            return CreatedAtAction(nameof(GetUserById), new { id = result.Data!.Id }, result);
+            return BadRequest(result);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating user with email: {Email}", createUserDto.Email);
-            return StatusCode(
-                500,
-                ApiResponse<UserDto>.Failure("An error occurred while creating user")
-            );
-        }
+
+        return CreatedAtAction(nameof(GetUserById), new { id = result.Data!.Id }, result);
     }
 
-    /// <summary>
-    /// Update user (Admin or own profile)
-    /// </summary>
-    /// <param name="id">User ID</param>
-    /// <param name="updateUserDto">User update data</param>
-    /// <returns>Updated user details</returns>
+    /// <summary>Updates a user (Admin, or the caller's own profile without privilege escalation).</summary>
     [HttpPut("{id:int}")]
     public async Task<ActionResult<ApiResponse<UserDto>>> UpdateUser(
         int id,
-        [FromBody] UpdateUserDto updateUserDto
+        [FromBody] UpdateUserDto updateUserDto,
+        CancellationToken cancellationToken
     )
     {
-        try
+        if (!TryGetCallerId(out var currentUserId))
         {
-            var currentUserIdClaim = User.FindFirst(AuthConstants.Claims.UserId)?.Value;
-            var isAdmin = User.FindFirst(AuthConstants.Claims.IsAdmin)?.Value == "True";
-
-            if (!int.TryParse(currentUserIdClaim, out int currentUserId))
-            {
-                return BadRequest(ApiResponse<UserDto>.Failure("Invalid user ID in token"));
-            }
-
-            // Allow update if user is admin or updating their own profile
-            if (!isAdmin && currentUserId != id)
-            {
-                return Forbid();
-            }
-
-            // Non-admin users cannot change role/admin status
-            if (!isAdmin)
-            {
-                // Get current user details to preserve role/admin settings
-                var currentUser = await _userService.GetUserByIdAsync(id);
-                if (currentUser.IsSuccess && currentUser.Data != null)
-                {
-                    updateUserDto.Role = currentUser.Data.Role;
-                    updateUserDto.IsAdmin = currentUser.Data.IsAdmin;
-                    updateUserDto.IsProvider = currentUser.Data.IsProvider;
-                }
-            }
-
-            _logger.LogInformation(
-                "User {CurrentUserId} updating user {UpdatedUserId}",
-                currentUserId,
-                id
-            );
-
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(
-                    ApiResponse<UserDto>.Failure(
-                        "Invalid request data",
-                        ModelState
-                            .Values.SelectMany(v => v.Errors.Select(e => e.ErrorMessage))
-                            .ToList()
-                    )
-                );
-            }
-
-            var result = await _userService.UpdateUserAsync(id, updateUserDto);
-
-            if (!result.IsSuccess)
-            {
-                return BadRequest(result);
-            }
-
-            return Ok(result);
+            return BadRequest(ApiResponse<UserDto>.Failure("Invalid user ID in token"));
         }
-        catch (Exception ex)
+
+        var isAdmin = IsAdmin();
+        if (!isAdmin && currentUserId != id)
         {
-            _logger.LogError(ex, "Error updating user {UserId}", id);
-            return StatusCode(
-                500,
-                ApiResponse<UserDto>.Failure("An error occurred while updating user")
-            );
+            return Forbid();
         }
+
+        // Non-admins cannot alter role/admin/provider flags: preserve the persisted values.
+        if (!isAdmin)
+        {
+            var current = await _userService.GetUserByIdAsync(id, cancellationToken);
+            if (current is { IsSuccess: true, Data: not null })
+            {
+                updateUserDto.Role = current.Data.Role;
+                updateUserDto.IsAdmin = current.Data.IsAdmin;
+                updateUserDto.IsProvider = current.Data.IsProvider;
+            }
+        }
+
+        var result = await _userService.UpdateUserAsync(id, updateUserDto, cancellationToken);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
 
-    /// <summary>
-    /// Delete user (Admin only)
-    /// </summary>
-    /// <param name="id">User ID</param>
-    /// <returns>Success status</returns>
+    /// <summary>Deletes a user (Admin only; cannot delete self).</summary>
     [HttpDelete("{id:int}")]
     [Authorize(Policy = AuthConstants.Policies.AdminOnly)]
-    public async Task<ActionResult<ApiResponse<bool>>> DeleteUser(int id)
+    public async Task<ActionResult<ApiResponse<bool>>> DeleteUser(
+        int id,
+        CancellationToken cancellationToken
+    )
     {
-        try
+        if (TryGetCallerId(out var currentUserId) && currentUserId == id)
         {
-            var currentUserIdClaim = User.FindFirst(AuthConstants.Claims.UserId)?.Value;
-            if (int.TryParse(currentUserIdClaim, out int currentUserId) && currentUserId == id)
-            {
-                return BadRequest(ApiResponse<bool>.Failure("Cannot delete your own account"));
-            }
-
-            _logger.LogInformation("Admin deleting user {UserId}", id);
-
-            var result = await _userService.DeleteUserAsync(id);
-
-            if (!result.IsSuccess)
-            {
-                return BadRequest(result);
-            }
-
-            return Ok(result);
+            return BadRequest(ApiResponse<bool>.Failure("Cannot delete your own account"));
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting user {UserId}", id);
-            return StatusCode(
-                500,
-                ApiResponse<bool>.Failure("An error occurred while deleting user")
-            );
-        }
+
+        var result = await _userService.DeleteUserAsync(id, cancellationToken);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
 
-    /// <summary>
-    /// Get all nurse practitioners (Admin or Provider)
-    /// </summary>
-    /// <returns>List of nurse practitioners</returns>
+    /// <summary>Lists nurse-practitioner users (Admin or Provider).</summary>
     [HttpGet("nurse-practitioners")]
     [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
-    public async Task<ActionResult<ApiResponse<IEnumerable<UserDto>>>> GetNursePractitioners()
-    {
-        try
-        {
-            _logger.LogInformation("Requesting nurse practitioners list");
-            var result = await _userService.GetNursePractitionersAsync();
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving nurse practitioners");
-            return StatusCode(
-                500,
-                ApiResponse<IEnumerable<UserDto>>.Failure(
-                    "An error occurred while retrieving nurse practitioners"
-                )
-            );
-        }
-    }
+    public async Task<ActionResult<ApiResponse<IEnumerable<UserDto>>>> GetNursePractitioners(
+        CancellationToken cancellationToken
+    ) => Ok(await _userService.GetNursePractitionersAsync(cancellationToken));
 
-    /// <summary>
-    /// Get all active users (Admin or Provider)
-    /// </summary>
-    /// <returns>List of active users</returns>
+    /// <summary>Lists active users (Admin or Provider).</summary>
     [HttpGet("active")]
     [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
-    public async Task<ActionResult<ApiResponse<IEnumerable<UserDto>>>> GetActiveUsers()
-    {
-        try
-        {
-            _logger.LogInformation("Requesting active users list");
-            var result = await _userService.GetActiveUsersAsync();
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving active users");
-            return StatusCode(
-                500,
-                ApiResponse<IEnumerable<UserDto>>.Failure(
-                    "An error occurred while retrieving active users"
-                )
-            );
-        }
-    }
+    public async Task<ActionResult<ApiResponse<IEnumerable<UserDto>>>> GetActiveUsers(
+        CancellationToken cancellationToken
+    ) => Ok(await _userService.GetActiveUsersAsync(cancellationToken));
+
+    private bool TryGetCallerId(out int userId) =>
+        int.TryParse(User.FindFirst(AuthConstants.Claims.UserId)?.Value, out userId);
+
+    private bool IsAdmin() =>
+        User.FindFirst(AuthConstants.Claims.IsAdmin)?.Value == "True";
 }

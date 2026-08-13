@@ -2,15 +2,56 @@ using InventoryManagement.Domain.DTOs;
 
 namespace InventoryManagement.Domain.Interfaces;
 
+/// <summary>User management operations (CRUD and role-scoped queries).</summary>
 public interface IUserService
 {
-    Task<ApiResponse<IEnumerable<UserDto>>> GetAllUsersAsync();
-    Task<ApiResponse<UserDto>> GetUserByIdAsync(int id);
-    Task<ApiResponse<UserDto>> GetUserByEmailAsync(string email);
-    Task<ApiResponse<UserDto>> CreateUserAsync(CreateUserDto createUserDto);
-    Task<ApiResponse<UserDto>> UpdateUserAsync(int id, UpdateUserDto updateUserDto);
-    Task<ApiResponse<bool>> DeleteUserAsync(int id);
-    Task<ApiResponse<IEnumerable<UserDto>>> GetNursePractitionersAsync();
-    Task<ApiResponse<IEnumerable<UserDto>>> GetActiveUsersAsync();
-    Task<ApiResponse<PagedResult<UserDto>>> GetUsersPagedAsync(int pageNumber, int pageSize);
+    /// <summary>Lists all users.</summary>
+    Task<ApiResponse<IEnumerable<UserDto>>> GetAllUsersAsync(
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>Gets a user by identifier.</summary>
+    Task<ApiResponse<UserDto>> GetUserByIdAsync(
+        int id,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>Gets a user by email.</summary>
+    Task<ApiResponse<UserDto>> GetUserByEmailAsync(
+        string email,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>Creates a user with a hashed password.</summary>
+    Task<ApiResponse<UserDto>> CreateUserAsync(
+        CreateUserDto createUserDto,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>Updates a user's profile.</summary>
+    Task<ApiResponse<UserDto>> UpdateUserAsync(
+        int id,
+        UpdateUserDto updateUserDto,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>Soft-deletes a user.</summary>
+    Task<ApiResponse<bool>> DeleteUserAsync(int id, CancellationToken cancellationToken = default);
+
+    /// <summary>Lists nurse-practitioner users.</summary>
+    Task<ApiResponse<IEnumerable<UserDto>>> GetNursePractitionersAsync(
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>Lists active users.</summary>
+    Task<ApiResponse<IEnumerable<UserDto>>> GetActiveUsersAsync(
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>Returns a deterministic page of users.</summary>
+    Task<ApiResponse<PagedResult<UserDto>>> GetUsersPagedAsync(
+        int pageNumber,
+        int pageSize,
+        CancellationToken cancellationToken = default
+    );
 }

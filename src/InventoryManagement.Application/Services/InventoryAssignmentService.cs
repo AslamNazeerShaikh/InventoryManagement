@@ -1,425 +1,429 @@
 using InventoryManagement.Application.Mapping;
 using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.DTOs;
+using InventoryManagement.Domain.Entities;
 using InventoryManagement.Domain.Enums;
 using InventoryManagement.Domain.Interfaces;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace InventoryManagement.Application.Services;
 
-public class InventoryAssignmentService : IInventoryAssignmentService
+/// <summary>
+/// Assignment service. Stock-changing operations run inside a transaction and rely on the entity
+/// concurrency token to prevent oversell under concurrent requests; conflicts surface as HTTP 409.
+/// </summary>
+public sealed class InventoryAssignmentService : IInventoryAssignmentService
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ILogger<InventoryAssignmentService> _logger;
 
-    public InventoryAssignmentService(IUnitOfWork unitOfWork)
+    /// <summary>Creates the assignment service.</summary>
+    public InventoryAssignmentService(
+        IUnitOfWork unitOfWork,
+        ILogger<InventoryAssignmentService> logger
+    )
     {
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
 
-    public async Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetAllAssignmentsAsync()
+    /// <inheritdoc />
+    public async Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetAllAssignmentsAsync(
+        CancellationToken cancellationToken = default
+    )
     {
-        try
-        {
-            var assignments = await _unitOfWork.InventoryAssignments.GetAllAsync(
-                x => x.Inventory,
-                x => x.User,
-                x => x.AssignedByUser
-            );
-            var assignmentDtos = assignments.ToDto();
-            return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Success(assignmentDtos);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Failure(
-                $"Error retrieving assignments: {ex.Message}"
-            );
-        }
+        var assignments = await _unitOfWork
+            .InventoryAssignments.ListAsync(
+                include: q =>
+                    q.Include(x => x.Inventory)
+                        .Include(x => x.User)
+                        .Include(x => x.AssignedByUser),
+                orderBy: q => q.OrderByDescending(x => x.AssignedDate),
+                cancellationToken: cancellationToken
+            )
+            .ConfigureAwait(false);
+        return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Success(assignments.ToDto());
     }
 
-    public async Task<ApiResponse<InventoryAssignmentDto>> GetAssignmentByIdAsync(int id)
+    /// <inheritdoc />
+    public async Task<ApiResponse<InventoryAssignmentDto>> GetAssignmentByIdAsync(
+        int id,
+        CancellationToken cancellationToken = default
+    )
     {
-        try
-        {
-            var assignment = await _unitOfWork.InventoryAssignments.GetByIdAsync(
-                id,
-                x => x.Inventory,
-                x => x.User,
-                x => x.AssignedByUser,
-                x => x.ReturnedToUser
-            );
+        var assignment = await _unitOfWork
+            .InventoryAssignments.FirstOrDefaultAsync(
+                x => x.Id == id,
+                include: q =>
+                    q.Include(a => a.Inventory)
+                        .Include(a => a.User)
+                        .Include(a => a.AssignedByUser)
+                        .Include(a => a.ReturnedToUser),
+                cancellationToken: cancellationToken
+            )
+            .ConfigureAwait(false);
 
-            if (assignment == null)
-            {
-                return ApiResponse<InventoryAssignmentDto>.Failure("Assignment not found");
-            }
-
-            return ApiResponse<InventoryAssignmentDto>.Success(assignment.ToDto());
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<InventoryAssignmentDto>.Failure(
-                $"Error retrieving assignment: {ex.Message}"
-            );
-        }
+        return assignment is null
+            ? ApiResponse<InventoryAssignmentDto>.Failure("Assignment not found")
+            : ApiResponse<InventoryAssignmentDto>.Success(assignment.ToDto());
     }
 
+    /// <inheritdoc />
     public async Task<ApiResponse<InventoryAssignmentDto>> CreateAssignmentAsync(
         CreateInventoryAssignmentDto createAssignmentDto,
-        int assignedByUserId
+        int assignedByUserId,
+        CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            await _unitOfWork.BeginTransactionAsync();
-
-            // Validate inventory exists and is available
-            var inventory = await _unitOfWork.Inventories.GetByIdAsync(
-                createAssignmentDto.InventoryId
-            );
-            if (inventory == null)
-            {
-                await _unitOfWork.RollbackTransactionAsync();
-                return ApiResponse<InventoryAssignmentDto>.Failure("Inventory not found");
-            }
-
-            if (inventory.Status != InventoryStatus.Available)
-            {
-                await _unitOfWork.RollbackTransactionAsync();
-                return ApiResponse<InventoryAssignmentDto>.Failure(
-                    "Inventory is not available for assignment"
-                );
-            }
-
-            // Check if inventory is expired
-            if (inventory.ExpiryDate.HasValue && inventory.ExpiryDate.Value < DateTime.UtcNow)
-            {
-                await _unitOfWork.RollbackTransactionAsync();
-                return ApiResponse<InventoryAssignmentDto>.Failure(
-                    "Cannot assign expired inventory"
-                );
-            }
-
-            // Check available quantity
-            if (inventory.AvailableQuantity < createAssignmentDto.AssignedQuantity)
-            {
-                await _unitOfWork.RollbackTransactionAsync();
-                return ApiResponse<InventoryAssignmentDto>.Failure(
-                    $"Insufficient quantity. Available: {inventory.AvailableQuantity}, Requested: {createAssignmentDto.AssignedQuantity}"
-                );
-            }
-
-            // Validate user exists
-            var user = await _unitOfWork.Users.GetByIdAsync(createAssignmentDto.UserId);
-            if (user == null)
-            {
-                await _unitOfWork.RollbackTransactionAsync();
-                return ApiResponse<InventoryAssignmentDto>.Failure("User not found");
-            }
-
-            // Create assignment
-            var assignment = createAssignmentDto.ToEntity();
-            assignment.AssignedByUserId = assignedByUserId;
-            assignment.Status = AssignmentStatus.Active;
-
-            await _unitOfWork.InventoryAssignments.AddAsync(assignment);
-
-            // Update inventory available quantity
-            inventory.AvailableQuantity -= createAssignmentDto.AssignedQuantity;
-            if (inventory.AvailableQuantity == 0)
-            {
-                inventory.Status = InventoryStatus.Assigned;
-            }
-            _unitOfWork.Inventories.Update(inventory);
-
-            await _unitOfWork.SaveAsync();
-            await _unitOfWork.CommitTransactionAsync();
-
-            // Get the created assignment with full details
-            var createdAssignment = await _unitOfWork.InventoryAssignments.GetByIdAsync(
-                assignment.Id,
-                x => x.Inventory,
-                x => x.User,
-                x => x.AssignedByUser
-            );
-
-            return ApiResponse<InventoryAssignmentDto>.Success(
-                createdAssignment!.ToDto(),
-                "Assignment created successfully"
-            );
-        }
-        catch (Exception ex)
-        {
-            await _unitOfWork.RollbackTransactionAsync();
-            return ApiResponse<InventoryAssignmentDto>.Failure(
-                $"Error creating assignment: {ex.Message}"
-            );
-        }
-    }
-
-    public async Task<ApiResponse<InventoryAssignmentDto>> UpdateAssignmentAsync(
-        int id,
-        UpdateInventoryAssignmentDto updateAssignmentDto
-    )
-    {
-        try
-        {
-            var assignment = await _unitOfWork.InventoryAssignments.GetByIdAsync(
-                id,
-                x => x.Inventory
-            );
-            if (assignment == null)
-            {
-                return ApiResponse<InventoryAssignmentDto>.Failure("Assignment not found");
-            }
-
-            if (assignment.Status != AssignmentStatus.Active)
-            {
-                return ApiResponse<InventoryAssignmentDto>.Failure(
-                    "Can only update active assignments"
-                );
-            }
-
-            // If quantity is being changed, validate inventory availability
-            if (updateAssignmentDto.AssignedQuantity != assignment.AssignedQuantity)
-            {
-                var quantityDifference =
-                    updateAssignmentDto.AssignedQuantity - assignment.AssignedQuantity;
-
-                if (quantityDifference > 0) // Increasing quantity
+        var outcome = await _unitOfWork
+            .ExecuteInTransactionAsync(
+                async ct =>
                 {
-                    if (assignment.Inventory.AvailableQuantity < quantityDifference)
+                    var inventory = await _unitOfWork.Inventories.GetByIdAsync(
+                        createAssignmentDto.InventoryId,
+                        ct
+                    )
+                        .ConfigureAwait(false);
+                    if (inventory is null)
                     {
-                        return ApiResponse<InventoryAssignmentDto>.Failure(
-                            "Insufficient inventory quantity available"
+                        return Failed("Inventory not found");
+                    }
+
+                    if (inventory.Status != InventoryStatus.Available)
+                    {
+                        return Failed("Inventory is not available for assignment");
+                    }
+
+                    if (inventory.ExpiryDate.HasValue && inventory.ExpiryDate.Value < DateTime.UtcNow)
+                    {
+                        return Failed("Cannot assign expired inventory");
+                    }
+
+                    if (inventory.AvailableQuantity < createAssignmentDto.AssignedQuantity)
+                    {
+                        return Failed(
+                            $"Insufficient quantity. Available: {inventory.AvailableQuantity}, "
+                                + $"Requested: {createAssignmentDto.AssignedQuantity}"
                         );
                     }
 
-                    assignment.Inventory.AvailableQuantity -= quantityDifference;
-                }
-                else // Decreasing quantity
-                {
-                    assignment.Inventory.AvailableQuantity += Math.Abs(quantityDifference);
-
-                    // Update inventory status if it becomes available again
-                    if (
-                        assignment.Inventory.Status == InventoryStatus.Assigned
-                        && assignment.Inventory.AvailableQuantity > 0
-                    )
+                    var user = await _unitOfWork.Users.GetByIdAsync(createAssignmentDto.UserId, ct)
+                        .ConfigureAwait(false);
+                    if (user is null)
                     {
-                        assignment.Inventory.Status = InventoryStatus.Available;
+                        return Failed("User not found");
                     }
-                }
 
-                _unitOfWork.Inventories.Update(assignment.Inventory);
-            }
+                    var assignment = createAssignmentDto.ToEntity();
+                    assignment.AssignedByUserId = assignedByUserId;
+                    assignment.Status = AssignmentStatus.Active;
+                    await _unitOfWork.InventoryAssignments.AddAsync(assignment, ct)
+                        .ConfigureAwait(false);
 
-            // Update assignment
-            updateAssignmentDto.UpdateEntity(assignment);
-            _unitOfWork.InventoryAssignments.Update(assignment);
-            await _unitOfWork.SaveAsync();
+                    inventory.AvailableQuantity -= createAssignmentDto.AssignedQuantity;
+                    if (inventory.AvailableQuantity == 0)
+                    {
+                        inventory.Status = InventoryStatus.Assigned;
+                    }
 
-            // Get updated assignment with full details
-            var updatedAssignment = await _unitOfWork.InventoryAssignments.GetByIdAsync(
-                id,
-                x => x.Inventory,
-                x => x.User,
-                x => x.AssignedByUser
-            );
+                    await _unitOfWork.SaveChangesAsync(ct).ConfigureAwait(false);
+                    return Succeeded(assignment.Id);
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
 
-            return ApiResponse<InventoryAssignmentDto>.Success(
-                updatedAssignment!.ToDto(),
-                "Assignment updated successfully"
-            );
-        }
-        catch (Exception ex)
+        if (!outcome.Success)
         {
-            return ApiResponse<InventoryAssignmentDto>.Failure(
-                $"Error updating assignment: {ex.Message}"
-            );
+            return ApiResponse<InventoryAssignmentDto>.Failure(outcome.Error!);
         }
+
+        _logger.LogInformation("Created assignment {AssignmentId}.", outcome.AssignmentId);
+        var created = await LoadForDtoAsync(outcome.AssignmentId, cancellationToken)
+            .ConfigureAwait(false);
+        return ApiResponse<InventoryAssignmentDto>.Success(
+            created!.ToDto(),
+            "Assignment created successfully"
+        );
     }
 
+    /// <inheritdoc />
+    public async Task<ApiResponse<InventoryAssignmentDto>> UpdateAssignmentAsync(
+        int id,
+        UpdateInventoryAssignmentDto updateAssignmentDto,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var outcome = await _unitOfWork
+            .ExecuteInTransactionAsync(
+                async ct =>
+                {
+                    var assignment = await _unitOfWork
+                        .InventoryAssignments.FirstOrDefaultAsync(
+                            x => x.Id == id,
+                            include: q => q.Include(a => a.Inventory),
+                            asNoTracking: false,
+                            cancellationToken: ct
+                        )
+                        .ConfigureAwait(false);
+
+                    if (assignment is null)
+                    {
+                        return Failed("Assignment not found");
+                    }
+
+                    if (assignment.Status != AssignmentStatus.Active)
+                    {
+                        return Failed("Can only update active assignments");
+                    }
+
+                    if (updateAssignmentDto.AssignedQuantity != assignment.AssignedQuantity)
+                    {
+                        var difference =
+                            updateAssignmentDto.AssignedQuantity - assignment.AssignedQuantity;
+
+                        if (difference > 0)
+                        {
+                            if (assignment.Inventory.AvailableQuantity < difference)
+                            {
+                                return Failed("Insufficient inventory quantity available");
+                            }
+
+                            assignment.Inventory.AvailableQuantity -= difference;
+                            if (assignment.Inventory.AvailableQuantity == 0)
+                            {
+                                assignment.Inventory.Status = InventoryStatus.Assigned;
+                            }
+                        }
+                        else
+                        {
+                            assignment.Inventory.AvailableQuantity += Math.Abs(difference);
+                            if (
+                                assignment.Inventory.Status == InventoryStatus.Assigned
+                                && assignment.Inventory.AvailableQuantity > 0
+                            )
+                            {
+                                assignment.Inventory.Status = InventoryStatus.Available;
+                            }
+                        }
+                    }
+
+                    updateAssignmentDto.UpdateEntity(assignment);
+                    await _unitOfWork.SaveChangesAsync(ct).ConfigureAwait(false);
+                    return Succeeded(assignment.Id);
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (!outcome.Success)
+        {
+            return ApiResponse<InventoryAssignmentDto>.Failure(outcome.Error!);
+        }
+
+        _logger.LogInformation("Updated assignment {AssignmentId}.", id);
+        var updated = await LoadForDtoAsync(id, cancellationToken).ConfigureAwait(false);
+        return ApiResponse<InventoryAssignmentDto>.Success(
+            updated!.ToDto(),
+            "Assignment updated successfully"
+        );
+    }
+
+    /// <inheritdoc />
     public async Task<ApiResponse<bool>> ReturnAssignmentAsync(
         ReturnInventoryAssignmentDto returnAssignmentDto,
-        int returnedToUserId
+        int returnedToUserId,
+        CancellationToken cancellationToken = default
     )
     {
-        try
+        var outcome = await _unitOfWork
+            .ExecuteInTransactionAsync(
+                async ct =>
+                {
+                    var assignment = await _unitOfWork
+                        .InventoryAssignments.FirstOrDefaultAsync(
+                            x => x.Id == returnAssignmentDto.AssignmentId,
+                            include: q => q.Include(a => a.Inventory),
+                            asNoTracking: false,
+                            cancellationToken: ct
+                        )
+                        .ConfigureAwait(false);
+
+                    if (assignment is null)
+                    {
+                        return Failed("Assignment not found");
+                    }
+
+                    if (assignment.Status != AssignmentStatus.Active)
+                    {
+                        return Failed("Assignment is not active");
+                    }
+
+                    assignment.Status = AssignmentStatus.Returned;
+                    assignment.ReturnDate = DateTime.UtcNow;
+                    assignment.ReturnedToUserId = returnedToUserId;
+                    assignment.ReturnNotes = returnAssignmentDto.ReturnNotes;
+
+                    var inventory = assignment.Inventory;
+                    // Restore stock without exceeding the total owned quantity (invariant guard).
+                    inventory.AvailableQuantity = Math.Min(
+                        inventory.Quantity,
+                        inventory.AvailableQuantity + assignment.AssignedQuantity
+                    );
+
+                    // Only a fully-assigned item returns to Available; never override
+                    // Damaged/Expired/Disposed lifecycle states.
+                    if (
+                        inventory.Status == InventoryStatus.Assigned
+                        && inventory.AvailableQuantity > 0
+                    )
+                    {
+                        inventory.Status = InventoryStatus.Available;
+                    }
+
+                    await _unitOfWork.SaveChangesAsync(ct).ConfigureAwait(false);
+                    return Succeeded(assignment.Id);
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (!outcome.Success)
         {
-            await _unitOfWork.BeginTransactionAsync();
-
-            var assignment = await _unitOfWork.InventoryAssignments.GetByIdAsync(
-                returnAssignmentDto.AssignmentId,
-                x => x.Inventory
-            );
-            if (assignment == null)
-            {
-                await _unitOfWork.RollbackTransactionAsync();
-                return ApiResponse<bool>.Failure("Assignment not found");
-            }
-
-            if (assignment.Status != AssignmentStatus.Active)
-            {
-                await _unitOfWork.RollbackTransactionAsync();
-                return ApiResponse<bool>.Failure("Assignment is not active");
-            }
-
-            // Update assignment status
-            assignment.Status = AssignmentStatus.Returned;
-            assignment.ReturnDate = DateTime.UtcNow;
-            assignment.ReturnedToUserId = returnedToUserId;
-            assignment.ReturnNotes = returnAssignmentDto.ReturnNotes;
-
-            // Return quantity to inventory
-            assignment.Inventory.AvailableQuantity += assignment.AssignedQuantity;
-            assignment.Inventory.Status = InventoryStatus.Available;
-
-            _unitOfWork.InventoryAssignments.Update(assignment);
-            _unitOfWork.Inventories.Update(assignment.Inventory);
-
-            await _unitOfWork.SaveAsync();
-            await _unitOfWork.CommitTransactionAsync();
-
-            return ApiResponse<bool>.Success(true, "Assignment returned successfully");
+            return ApiResponse<bool>.Failure(outcome.Error!);
         }
-        catch (Exception ex)
-        {
-            await _unitOfWork.RollbackTransactionAsync();
-            return ApiResponse<bool>.Failure($"Error returning assignment: {ex.Message}");
-        }
+
+        _logger.LogInformation(
+            "Returned assignment {AssignmentId}.",
+            returnAssignmentDto.AssignmentId
+        );
+        return ApiResponse<bool>.Success(true, "Assignment returned successfully");
     }
 
-    public async Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetAssignmentsByUserIdAsync(
-        int userId
-    )
-    {
-        try
-        {
-            var assignments = await _unitOfWork.InventoryAssignments.GetAssignmentsByUserIdAsync(
-                userId
-            );
-            var assignmentDtos = assignments.ToDto();
-            return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Success(assignmentDtos);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Failure(
-                $"Error retrieving user assignments: {ex.Message}"
-            );
-        }
-    }
-
-    public async Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetActiveAssignmentsAsync()
-    {
-        try
-        {
-            var assignments = await _unitOfWork.InventoryAssignments.GetActiveAssignmentsAsync();
-            var assignmentDtos = assignments.ToDto();
-            return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Success(assignmentDtos);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Failure(
-                $"Error retrieving active assignments: {ex.Message}"
-            );
-        }
-    }
-
+    /// <inheritdoc />
     public async Task<
         ApiResponse<IEnumerable<InventoryAssignmentDto>>
-    > GetActiveAssignmentsByUserIdAsync(int userId)
+    > GetAssignmentsByUserIdAsync(int userId, CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var assignments =
-                await _unitOfWork.InventoryAssignments.GetActiveAssignmentsByUserIdAsync(userId);
-            var assignmentDtos = assignments.ToDto();
-            return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Success(assignmentDtos);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Failure(
-                $"Error retrieving user active assignments: {ex.Message}"
-            );
-        }
+        var assignments = await _unitOfWork
+            .InventoryAssignments.GetAssignmentsByUserIdAsync(userId, cancellationToken)
+            .ConfigureAwait(false);
+        return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Success(assignments.ToDto());
     }
 
-    public async Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetOverdueAssignmentsAsync()
-    {
-        try
-        {
-            var assignments = await _unitOfWork.InventoryAssignments.GetOverdueAssignmentsAsync();
-            var assignmentDtos = assignments.ToDto();
-            return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Success(assignmentDtos);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Failure(
-                $"Error retrieving overdue assignments: {ex.Message}"
-            );
-        }
-    }
-
-    public async Task<ApiResponse<AssignmentHistoryDto>> GetAssignmentHistoryAsync(int inventoryId)
-    {
-        try
-        {
-            var inventory = await _unitOfWork.Inventories.GetByIdAsync(inventoryId);
-            if (inventory == null)
-            {
-                return ApiResponse<AssignmentHistoryDto>.Failure("Inventory not found");
-            }
-
-            var assignments = await _unitOfWork.InventoryAssignments.GetAssignmentHistoryAsync(
-                inventoryId
-            );
-
-            var historyDto = new AssignmentHistoryDto
-            {
-                InventoryId = inventoryId,
-                EquipmentName = inventory.EquipmentName,
-                Assignments = assignments.ToDto().ToList(),
-            };
-
-            return ApiResponse<AssignmentHistoryDto>.Success(historyDto);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<AssignmentHistoryDto>.Failure(
-                $"Error retrieving assignment history: {ex.Message}"
-            );
-        }
-    }
-
-    public async Task<ApiResponse<PagedResult<InventoryAssignmentDto>>> GetAssignmentsPagedAsync(
-        int pageNumber,
-        int pageSize
+    /// <inheritdoc />
+    public async Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetActiveAssignmentsAsync(
+        CancellationToken cancellationToken = default
     )
     {
-        try
-        {
-            pageSize = Math.Min(pageSize, BusinessConstants.Pagination.MaxPageSize);
-
-            var assignments = await _unitOfWork.InventoryAssignments.GetPagedAsync(
-                pageNumber,
-                pageSize
-            );
-            var totalCount = await _unitOfWork.InventoryAssignments.CountAsync();
-
-            var pagedResult = new PagedResult<InventoryAssignmentDto>
-            {
-                Data = assignments.ToDto(),
-                TotalCount = totalCount,
-                PageNumber = pageNumber,
-                PageSize = pageSize,
-            };
-
-            return ApiResponse<PagedResult<InventoryAssignmentDto>>.Success(pagedResult);
-        }
-        catch (Exception ex)
-        {
-            return ApiResponse<PagedResult<InventoryAssignmentDto>>.Failure(
-                $"Error retrieving paged assignments: {ex.Message}"
-            );
-        }
+        var assignments = await _unitOfWork.InventoryAssignments.GetActiveAssignmentsAsync(
+            cancellationToken
+        )
+            .ConfigureAwait(false);
+        return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Success(assignments.ToDto());
     }
+
+    /// <inheritdoc />
+    public async Task<
+        ApiResponse<IEnumerable<InventoryAssignmentDto>>
+    > GetActiveAssignmentsByUserIdAsync(int userId, CancellationToken cancellationToken = default)
+    {
+        var assignments = await _unitOfWork
+            .InventoryAssignments.GetActiveAssignmentsByUserIdAsync(userId, cancellationToken)
+            .ConfigureAwait(false);
+        return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Success(assignments.ToDto());
+    }
+
+    /// <inheritdoc />
+    public async Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetOverdueAssignmentsAsync(
+        CancellationToken cancellationToken = default
+    )
+    {
+        var assignments = await _unitOfWork.InventoryAssignments.GetOverdueAssignmentsAsync(
+            cancellationToken
+        )
+            .ConfigureAwait(false);
+        return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Success(assignments.ToDto());
+    }
+
+    /// <inheritdoc />
+    public async Task<ApiResponse<AssignmentHistoryDto>> GetAssignmentHistoryAsync(
+        int inventoryId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var inventory = await _unitOfWork.Inventories.GetByIdAsync(inventoryId, cancellationToken)
+            .ConfigureAwait(false);
+        if (inventory is null)
+        {
+            return ApiResponse<AssignmentHistoryDto>.Failure("Inventory not found");
+        }
+
+        var assignments = await _unitOfWork
+            .InventoryAssignments.GetAssignmentHistoryAsync(inventoryId, cancellationToken)
+            .ConfigureAwait(false);
+
+        var historyDto = new AssignmentHistoryDto
+        {
+            InventoryId = inventoryId,
+            EquipmentName = inventory.EquipmentName,
+            Assignments = assignments.ToDto().ToList(),
+        };
+
+        return ApiResponse<AssignmentHistoryDto>.Success(historyDto);
+    }
+
+    /// <inheritdoc />
+    public async Task<ApiResponse<PagedResult<InventoryAssignmentDto>>> GetAssignmentsPagedAsync(
+        int pageNumber,
+        int pageSize,
+        CancellationToken cancellationToken = default
+    )
+    {
+        pageSize = Math.Clamp(pageSize, 1, BusinessConstants.Pagination.MaxPageSize);
+
+        // Include the related graph so DTO projection has all navigation data (fixes prior NRE).
+        var page = await _unitOfWork
+            .InventoryAssignments.GetPagedAsync(
+                pageNumber,
+                pageSize,
+                orderBy: q => q.OrderByDescending(x => x.AssignedDate),
+                include: q =>
+                    q.Include(x => x.Inventory)
+                        .Include(x => x.User)
+                        .Include(x => x.AssignedByUser),
+                cancellationToken: cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        var result = new PagedResult<InventoryAssignmentDto>
+        {
+            Data = page.Items.ToDto(),
+            TotalCount = page.TotalCount,
+            PageNumber = pageNumber,
+            PageSize = pageSize,
+        };
+
+        return ApiResponse<PagedResult<InventoryAssignmentDto>>.Success(result);
+    }
+
+    /// <summary>Loads a single assignment (tracking-free) with its related graph for projection.</summary>
+    private Task<InventoryAssignment?> LoadForDtoAsync(
+        int id,
+        CancellationToken cancellationToken
+    ) =>
+        _unitOfWork.InventoryAssignments.FirstOrDefaultAsync(
+            x => x.Id == id,
+            include: q =>
+                q.Include(a => a.Inventory).Include(a => a.User).Include(a => a.AssignedByUser),
+            cancellationToken: cancellationToken
+        );
+
+    // Small transactional result helpers keep the delegate bodies readable and allocation-light.
+    private static TransactionOutcome Failed(string error) => new(false, 0, error);
+
+    private static TransactionOutcome Succeeded(int assignmentId) => new(true, assignmentId, null);
+
+    private readonly record struct TransactionOutcome(bool Success, int AssignmentId, string? Error);
 }

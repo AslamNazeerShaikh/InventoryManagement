@@ -1,27 +1,25 @@
-using System.Text;
+using InventoryManagement.API.Infrastructure;
 using InventoryManagement.Application.Extensions;
-using InventoryManagement.Domain.Constants;
+using InventoryManagement.Domain.Configuration;
 using InventoryManagement.Infrastructure.Extensions;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using Serilog;
 
 namespace InventoryManagement.API;
 
+/// <summary>
+/// Application entry point. Configures structured logging, dependency injection, security, the HTTP
+/// pipeline (in the correct order) and database seeding for the Inventory Management API.
+/// </summary>
 public class Program
 {
-    public static async Task Main(string[] args)
+    /// <summary>Builds, configures and runs the web application.</summary>
+    public static async Task<int> Main(string[] args)
     {
-        // Configure Serilog first
+        // Stage 1: a bootstrap logger captures failures during startup itself.
         Log.Logger = new LoggerConfiguration()
-            .ReadFrom.Configuration(
-                new ConfigurationBuilder()
-                    .AddJsonFile("appsettings.json")
-                    .AddJsonFile("appsettings.Development.json", true)
-                    .Build()
-            )
-            .CreateLogger();
+            .WriteTo.Console()
+            .CreateBootstrapLogger();
 
         try
         {
@@ -29,188 +27,75 @@ public class Program
 
             var builder = WebApplication.CreateBuilder(args);
 
-            // Use Serilog
-            builder.Host.UseSerilog();
+            // Stage 2: full structured logging read from configuration (Serilog section).
+            builder.Host.UseSerilog(
+                (context, services, configuration) =>
+                    configuration
+                        .ReadFrom.Configuration(context.Configuration)
+                        .ReadFrom.Services(services)
+                        .Enrich.FromLogContext()
+            );
 
-            // Add services to the container
-            builder.Services.AddControllers();
-
-            // Add CORS
-            builder.Services.AddCors(options =>
-            {
-                options.AddPolicy(
-                    "DevelopmentPolicy",
-                    policy =>
-                    {
-                        var allowedOrigins =
-                            builder.Configuration.GetSection("CORS:AllowedOrigins").Get<string[]>()
-                            ?? [];
-                        policy
-                            .WithOrigins(allowedOrigins)
-                            .AllowAnyMethod()
-                            .AllowAnyHeader()
-                            .AllowCredentials();
-                    }
-                );
-            });
-
-            // Add Infrastructure services (Database, Repositories)
             builder.Services.AddInfrastructureServices(builder.Configuration);
-
-            // Add Application services
             builder.Services.AddApplicationServices();
+            builder.Services.AddApiServices(builder.Configuration, builder.Environment);
 
-            // Add JWT Authentication
-            var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-            var key = Encoding.ASCII.GetBytes(jwtSettings["Key"]!);
-
-            builder
-                .Services.AddAuthentication(options =>
-                {
-                    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-                    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-                })
-                .AddJwtBearer(options =>
-                {
-                    options.RequireHttpsMetadata = false; // Only for development
-                    options.SaveToken = true;
-                    options.TokenValidationParameters = new TokenValidationParameters
-                    {
-                        ValidateIssuerSigningKey = true,
-                        IssuerSigningKey = new SymmetricSecurityKey(key),
-                        ValidateIssuer = true,
-                        ValidIssuer = jwtSettings["Issuer"],
-                        ValidateAudience = true,
-                        ValidAudience = jwtSettings["Audience"],
-                        ValidateLifetime = true,
-                        ClockSkew = TimeSpan.Zero,
-                    };
-                });
-
-            // Add Authorization with policies
-            builder.Services.AddAuthorization(options =>
-            {
-                // Admin only policy
-                options.AddPolicy(
-                    AuthConstants.Policies.AdminOnly,
-                    policy => policy.RequireClaim(AuthConstants.Claims.IsAdmin, "True")
-                );
-
-                // Admin or Provider policy
-                options.AddPolicy(
-                    AuthConstants.Policies.AdminOrProvider,
-                    policy =>
-                        policy.RequireAssertion(context =>
-                            context.User.HasClaim(AuthConstants.Claims.IsAdmin, "True")
-                            || context.User.HasClaim(AuthConstants.Claims.IsProvider, "True")
-                        )
-                );
-
-                // All authenticated users policy
-                options.AddPolicy(
-                    AuthConstants.Policies.AllRoles,
-                    policy => policy.RequireAuthenticatedUser()
-                );
-
-                // Role-based policies
-                options.AddPolicy(
-                    "RequireAdminRole",
-                    policy =>
-                        policy.RequireClaim(AuthConstants.Claims.Role, AuthConstants.Roles.Admin)
-                );
-
-                options.AddPolicy(
-                    "RequireProviderRole",
-                    policy =>
-                        policy.RequireClaim(
-                            AuthConstants.Claims.Role,
-                            AuthConstants.Roles.NursePractitioner
-                        )
-                );
-
-                options.AddPolicy(
-                    "RequireStaffRole",
-                    policy =>
-                        policy.RequireClaim(AuthConstants.Claims.Role, AuthConstants.Roles.Staff)
-                );
-            });
-
-            // Add OpenAPI
             builder.Services.AddOpenApi();
-
-            // Add problem details
-            builder.Services.AddProblemDetails();
 
             var app = builder.Build();
 
-            // Configure the HTTP request pipeline
-            if (app.Environment.IsDevelopment())
-            {
-                app.UseDeveloperExceptionPage();
-                app.MapOpenApi();
-                app.MapScalarApiReference();
-                app.UseCors("DevelopmentPolicy");
-            }
-            else
-            {
-                app.UseExceptionHandler("/Error");
-                app.UseHsts();
-            }
+            ConfigurePipeline(app);
 
-            // Middleware pipeline
-            app.UseSerilogRequestLogging(options =>
-            {
-                options.MessageTemplate =
-                    "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms";
-                options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
-                {
-                    diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);
-                    diagnosticContext.Set("RequestScheme", httpContext.Request.Scheme);
-                    diagnosticContext.Set(
-                        "UserAgent",
-                        httpContext.Request.Headers.UserAgent.ToString()
-                    );
-                    if (httpContext.User.Identity?.IsAuthenticated == true)
-                    {
-                        diagnosticContext.Set(
-                            "UserId",
-                            httpContext.User.FindFirst(AuthConstants.Claims.UserId)?.Value
-                        );
-                        diagnosticContext.Set(
-                            "UserEmail",
-                            httpContext.User.FindFirst(AuthConstants.Claims.Email)?.Value
-                        );
-                    }
-                };
-            });
-
-            app.UseHttpsRedirection();
-            app.UseMiddleware<InventoryManagement.API.Middleware.IdempotencyMiddleware>();
-            app.UseRouting();
-
-            // Authentication & Authorization
-            app.UseAuthentication();
-            app.UseAuthorization();
-
-            // Map controllers
-            app.MapControllers();
-
-            // Seed database
-            using (var scope = app.Services.CreateScope())
-            {
-                await scope.ServiceProvider.SeedDatabaseAsync();
-            }
+            await app.Services.SeedDatabaseAsync().ConfigureAwait(false);
 
             Log.Information("Inventory Management API started successfully");
-            await app.RunAsync();
+            await app.RunAsync().ConfigureAwait(false);
+            return 0;
         }
         catch (Exception ex)
         {
             Log.Fatal(ex, "Application terminated unexpectedly");
+            return 1;
         }
         finally
         {
-            await Log.CloseAndFlushAsync();
+            await Log.CloseAndFlushAsync().ConfigureAwait(false);
         }
+    }
+
+    /// <summary>Configures the HTTP request pipeline with correctly ordered middleware.</summary>
+    private static void ConfigurePipeline(WebApplication app)
+    {
+        // Global exception handling first so every downstream fault is converted uniformly.
+        app.UseExceptionHandler();
+
+        if (app.Environment.IsDevelopment())
+        {
+            app.MapOpenApi();
+            app.MapScalarApiReference();
+        }
+        else
+        {
+            app.UseHsts();
+        }
+
+        app.UseSerilogRequestLogging();
+        app.UseHttpsRedirection();
+
+        app.UseRouting();
+
+        // CORS is applied in all environments (configuration-driven).
+        app.UseCors(CorsOptions.PolicyName);
+
+        app.UseRateLimiter();
+
+        app.UseAuthentication();
+        app.UseAuthorization();
+
+        // Idempotency runs AFTER authentication so anonymous callers cannot populate the store.
+        app.UseMiddleware<IdempotencyMiddleware>();
+
+        app.MapControllers();
+        app.MapHealthChecks("/health");
     }
 }
