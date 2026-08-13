@@ -5,6 +5,7 @@
     <Platform Name="x86" />
   </Configurations>
   <Folder Name="/docs/">
+    <File Path="docs/Current-Issues.md" />
     <File Path="docs\API-Testing-Guide.md" />
     <File Path="docs\Database-Schema.md" />
     <File Path="docs\Data-Flow-Architecture.md" />
@@ -12,25 +13,25 @@
     <File Path="docs\README.md" />
   </Folder>
   <Folder Name="/src/">
-    <Project Path="src\InventoryManagement.API\InventoryManagement.API.csproj" Type="C#">
+    <Project Path="src\InventoryManagement.API\InventoryManagement.API.csproj">
       <Configuration Solution="Debug|x64" Project="Debug|Any CPU" />
       <Configuration Solution="Debug|x86" Project="Debug|Any CPU" />
       <Configuration Solution="Release|x64" Project="Release|Any CPU" />
       <Configuration Solution="Release|x86" Project="Release|Any CPU" />
     </Project>
-    <Project Path="src\InventoryManagement.Application\InventoryManagement.Application.csproj" Type="C#">
+    <Project Path="src\InventoryManagement.Application\InventoryManagement.Application.csproj">
       <Configuration Solution="Debug|x64" Project="Debug|Any CPU" />
       <Configuration Solution="Debug|x86" Project="Debug|Any CPU" />
       <Configuration Solution="Release|x64" Project="Release|Any CPU" />
       <Configuration Solution="Release|x86" Project="Release|Any CPU" />
     </Project>
-    <Project Path="src\InventoryManagement.Domain\InventoryManagement.Domain.csproj" Type="C#">
+    <Project Path="src\InventoryManagement.Domain\InventoryManagement.Domain.csproj">
       <Configuration Solution="Debug|x64" Project="Debug|Any CPU" />
       <Configuration Solution="Debug|x86" Project="Debug|Any CPU" />
       <Configuration Solution="Release|x64" Project="Release|Any CPU" />
       <Configuration Solution="Release|x86" Project="Release|Any CPU" />
     </Project>
-    <Project Path="src\InventoryManagement.Infrastructure\InventoryManagement.Infrastructure.csproj" Type="C#">
+    <Project Path="src\InventoryManagement.Infrastructure\InventoryManagement.Infrastructure.csproj">
       <Configuration Solution="Debug|x64" Project="Debug|Any CPU" />
       <Configuration Solution="Debug|x86" Project="Debug|Any CPU" />
       <Configuration Solution="Release|x64" Project="Release|Any CPU" />
@@ -41,7 +42,7 @@
     <Project Path="tests/InventoryManagement.API.Tests/InventoryManagement.API.Tests.csproj" />
     <Project Path="tests/InventoryManagement.Domain.Tests/InventoryManagement.Domain.Tests.csproj" />
     <Project Path="tests/InventoryManagement.Infrastructure.Tests/InventoryManagement.Infrastructure.Tests.csproj" />
-    <Project Path="tests\InventoryManagement.Application.Tests\InventoryManagement.Application.Tests.csproj" Type="C#">
+    <Project Path="tests\InventoryManagement.Application.Tests\InventoryManagement.Application.Tests.csproj">
       <Configuration Solution="Debug|x64" Project="Debug|Any CPU" />
       <Configuration Solution="Debug|x86" Project="Debug|Any CPU" />
       <Configuration Solution="Release|x64" Project="Release|Any CPU" />
