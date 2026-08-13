@@ -44,7 +44,14 @@ public class InventoryAssignmentsController : ControllerBase
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 10,
         CancellationToken cancellationToken = default
-    ) => Ok(await _assignmentService.GetAssignmentsPagedAsync(pageNumber, pageSize, cancellationToken));
+    ) =>
+        Ok(
+            await _assignmentService.GetAssignmentsPagedAsync(
+                pageNumber,
+                pageSize,
+                cancellationToken
+            )
+        );
 
     /// <summary>Gets an assignment by identifier (Admin/Provider, or the recipient).</summary>
     [HttpGet("{id:int}")]

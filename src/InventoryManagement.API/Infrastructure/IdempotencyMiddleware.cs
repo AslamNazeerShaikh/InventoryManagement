@@ -56,10 +56,10 @@ public sealed class IdempotencyMiddleware
         if (idempotencyKey.Length > _options.MaxKeyLength)
         {
             await WriteAsync(
-                context,
-                StatusCodes.Status400BadRequest,
-                $"Idempotency key exceeds the maximum length of {_options.MaxKeyLength} characters."
-            )
+                    context,
+                    StatusCodes.Status400BadRequest,
+                    $"Idempotency key exceeds the maximum length of {_options.MaxKeyLength} characters."
+                )
                 .ConfigureAwait(false);
             return;
         }
@@ -81,19 +81,19 @@ public sealed class IdempotencyMiddleware
         {
             case IdempotencyBeginStatus.InProgress:
                 await WriteAsync(
-                    context,
-                    StatusCodes.Status409Conflict,
-                    "A request with this idempotency key is already in progress."
-                )
+                        context,
+                        StatusCodes.Status409Conflict,
+                        "A request with this idempotency key is already in progress."
+                    )
                     .ConfigureAwait(false);
                 return;
 
             case IdempotencyBeginStatus.KeyMismatch:
                 await WriteAsync(
-                    context,
-                    StatusCodes.Status422UnprocessableEntity,
-                    "This idempotency key was already used for a different request."
-                )
+                        context,
+                        StatusCodes.Status422UnprocessableEntity,
+                        "This idempotency key was already used for a different request."
+                    )
                     .ConfigureAwait(false);
                 return;
 
@@ -155,7 +155,8 @@ public sealed class IdempotencyMiddleware
             // Server errors release the lock so the operation can be retried safely.
             if (statusCode >= StatusCodes.Status500InternalServerError)
             {
-                await store.ReleaseAsync(idempotencyKey, context.RequestAborted)
+                await store
+                    .ReleaseAsync(idempotencyKey, context.RequestAborted)
                     .ConfigureAwait(false);
             }
             else
@@ -163,7 +164,11 @@ public sealed class IdempotencyMiddleware
                 string? body = null;
                 if (buffer.Length <= _options.MaxCacheableBodyBytes)
                 {
-                    body = System.Text.Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
+                    body = System.Text.Encoding.UTF8.GetString(
+                        buffer.GetBuffer(),
+                        0,
+                        (int)buffer.Length
+                    );
                 }
                 else
                 {
@@ -218,14 +223,18 @@ public sealed class IdempotencyMiddleware
         }
     }
 
-    private static async Task ReplayAsync(HttpContext context, Domain.Entities.IdempotentRequest record)
+    private static async Task ReplayAsync(
+        HttpContext context,
+        Domain.Entities.IdempotentRequest record
+    )
     {
         context.Response.StatusCode = record.ResponseStatusCode;
         context.Response.ContentType = record.ResponseContentType ?? "application/json";
         context.Response.Headers["Idempotency-Replayed"] = "true";
         if (!string.IsNullOrEmpty(record.ResponseBody))
         {
-            await context.Response.WriteAsync(record.ResponseBody, context.RequestAborted)
+            await context
+                .Response.WriteAsync(record.ResponseBody, context.RequestAborted)
                 .ConfigureAwait(false);
         }
     }

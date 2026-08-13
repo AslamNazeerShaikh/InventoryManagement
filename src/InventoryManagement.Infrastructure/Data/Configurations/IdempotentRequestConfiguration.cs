@@ -32,7 +32,9 @@ public class IdempotentRequestConfiguration : IEntityTypeConfiguration<Idempoten
         builder.Property(x => x.LockExpiresAt).IsRequired();
 
         // Indexes supporting lock-expiry reclaim and retention-based purging.
-        builder.HasIndex(x => x.LockExpiresAt).HasDatabaseName("IX_IdempotentRequests_LockExpiresAt");
+        builder
+            .HasIndex(x => x.LockExpiresAt)
+            .HasDatabaseName("IX_IdempotentRequests_LockExpiresAt");
 
         builder.HasIndex(x => x.ExpiresAt).HasDatabaseName("IX_IdempotentRequests_ExpiresAt");
     }

@@ -10,8 +10,10 @@ public class EfIdempotencyStoreTests
     private static readonly TimeSpan Lock = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan Retention = TimeSpan.FromHours(1);
 
-    private static EfIdempotencyStore CreateStore(SqliteInMemoryFixture fixture, MutableClock clock) =>
-        new(fixture.Context, clock, NullLogger<EfIdempotencyStore>.Instance);
+    private static EfIdempotencyStore CreateStore(
+        SqliteInMemoryFixture fixture,
+        MutableClock clock
+    ) => new(fixture.Context, clock, NullLogger<EfIdempotencyStore>.Instance);
 
     [Fact]
     public async Task TryBegin_FirstCall_Proceeds()

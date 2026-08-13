@@ -103,7 +103,10 @@ public class InventoryRepository : GenericRepository<Inventory>, IInventoryRepos
     public async Task<bool> IsBarcodeExistsAsync(
         string barcode,
         CancellationToken cancellationToken = default
-    ) => await EntitySet.AnyAsync(x => x.Barcode == barcode, cancellationToken).ConfigureAwait(false);
+    ) =>
+        await EntitySet
+            .AnyAsync(x => x.Barcode == barcode, cancellationToken)
+            .ConfigureAwait(false);
 
     /// <inheritdoc />
     public async Task<bool> IsSerialNumberExistsAsync(
@@ -121,9 +124,7 @@ public class InventoryRepository : GenericRepository<Inventory>, IInventoryRepos
     ) =>
         await EntitySet
             .AsNoTracking()
-            .Where(x =>
-                x.AvailableQuantity <= threshold && x.Status == InventoryStatus.Available
-            )
+            .Where(x => x.AvailableQuantity <= threshold && x.Status == InventoryStatus.Available)
             .Include(x => x.CreatedByUser)
             .OrderBy(x => x.AvailableQuantity)
             .ToListAsync(cancellationToken)

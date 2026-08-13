@@ -66,14 +66,13 @@ public sealed class IdempotencyCleanupService : BackgroundService
                 .PurgeExpiredAsync(_options.CleanupBatchSize, cancellationToken)
                 .ConfigureAwait(false);
             totalRemoved += removed;
-        } while (removed == _options.CleanupBatchSize && !cancellationToken.IsCancellationRequested);
+        } while (
+            removed == _options.CleanupBatchSize && !cancellationToken.IsCancellationRequested
+        );
 
         if (totalRemoved > 0)
         {
-            _logger.LogInformation(
-                "Purged {Count} expired idempotency record(s).",
-                totalRemoved
-            );
+            _logger.LogInformation("Purged {Count} expired idempotency record(s).", totalRemoved);
         }
     }
 }

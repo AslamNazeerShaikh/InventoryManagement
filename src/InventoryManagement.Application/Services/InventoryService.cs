@@ -56,7 +56,8 @@ public sealed class InventoryService : IInventoryService
         CancellationToken cancellationToken = default
     )
     {
-        var inventory = await _unitOfWork.Inventories.GetByBarcodeAsync(barcode, cancellationToken)
+        var inventory = await _unitOfWork
+            .Inventories.GetByBarcodeAsync(barcode, cancellationToken)
             .ConfigureAwait(false);
         return inventory is null
             ? ApiResponse<InventoryDto>.Failure("Inventory not found")
@@ -103,7 +104,10 @@ public sealed class InventoryService : IInventoryService
         _logger.LogInformation("Created inventory {InventoryId}.", inventory.Id);
         var created = await LoadWithCreatorAsync(inventory.Id, cancellationToken)
             .ConfigureAwait(false);
-        return ApiResponse<InventoryDto>.Success(created!.ToDto(), "Inventory created successfully");
+        return ApiResponse<InventoryDto>.Success(
+            created!.ToDto(),
+            "Inventory created successfully"
+        );
     }
 
     /// <inheritdoc />
@@ -113,7 +117,8 @@ public sealed class InventoryService : IInventoryService
         CancellationToken cancellationToken = default
     )
     {
-        var inventory = await _unitOfWork.Inventories.GetByIdAsync(id, cancellationToken)
+        var inventory = await _unitOfWork
+            .Inventories.GetByIdAsync(id, cancellationToken)
             .ConfigureAwait(false);
         if (inventory is null)
         {
@@ -150,7 +155,9 @@ public sealed class InventoryService : IInventoryService
         var newAvailableQuantity = inventory.AvailableQuantity + quantityDifference;
         if (newAvailableQuantity < 0)
         {
-            return ApiResponse<InventoryDto>.Failure("Cannot reduce quantity below assigned amount");
+            return ApiResponse<InventoryDto>.Failure(
+                "Cannot reduce quantity below assigned amount"
+            );
         }
 
         updateInventoryDto.UpdateEntity(inventory);
@@ -160,7 +167,10 @@ public sealed class InventoryService : IInventoryService
 
         _logger.LogInformation("Updated inventory {InventoryId}.", id);
         var updated = await LoadWithCreatorAsync(id, cancellationToken).ConfigureAwait(false);
-        return ApiResponse<InventoryDto>.Success(updated!.ToDto(), "Inventory updated successfully");
+        return ApiResponse<InventoryDto>.Success(
+            updated!.ToDto(),
+            "Inventory updated successfully"
+        );
     }
 
     /// <inheritdoc />
@@ -169,7 +179,8 @@ public sealed class InventoryService : IInventoryService
         CancellationToken cancellationToken = default
     )
     {
-        var inventory = await _unitOfWork.Inventories.GetByIdAsync(id, cancellationToken)
+        var inventory = await _unitOfWork
+            .Inventories.GetByIdAsync(id, cancellationToken)
             .ConfigureAwait(false);
         if (inventory is null)
         {
@@ -200,7 +211,8 @@ public sealed class InventoryService : IInventoryService
         CancellationToken cancellationToken = default
     )
     {
-        var inventories = await _unitOfWork.Inventories.GetAvailableInventoriesAsync(cancellationToken)
+        var inventories = await _unitOfWork
+            .Inventories.GetAvailableInventoriesAsync(cancellationToken)
             .ConfigureAwait(false);
         return ApiResponse<IEnumerable<InventoryDto>>.Success(inventories.ToDto());
     }

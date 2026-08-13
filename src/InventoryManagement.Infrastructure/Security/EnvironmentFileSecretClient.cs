@@ -29,10 +29,7 @@ public sealed class EnvironmentFileSecretClient : ISecretClient
 
         if (File.Exists(secretName))
         {
-            _logger.LogInformation(
-                "Resolving secret {SecretName} from mounted file.",
-                secretName
-            );
+            _logger.LogInformation("Resolving secret {SecretName} from mounted file.", secretName);
             var fileValue = await File.ReadAllTextAsync(secretName, cancellationToken)
                 .ConfigureAwait(false);
             return fileValue.Trim();

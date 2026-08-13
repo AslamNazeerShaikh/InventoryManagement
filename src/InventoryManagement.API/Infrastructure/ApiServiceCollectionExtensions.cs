@@ -86,7 +86,8 @@ public static class ApiServiceCollectionExtensions
     private static void AddCors(IServiceCollection services, IConfiguration configuration)
     {
         var corsOptions =
-            configuration.GetSection(CorsOptions.SectionName).Get<CorsOptions>() ?? new CorsOptions();
+            configuration.GetSection(CorsOptions.SectionName).Get<CorsOptions>()
+            ?? new CorsOptions();
 
         services.AddCors(options =>
         {
@@ -94,7 +95,10 @@ public static class ApiServiceCollectionExtensions
                 CorsOptions.PolicyName,
                 policy =>
                 {
-                    policy.WithOrigins(corsOptions.AllowedOrigins).AllowAnyMethod().AllowAnyHeader();
+                    policy
+                        .WithOrigins(corsOptions.AllowedOrigins)
+                        .AllowAnyMethod()
+                        .AllowAnyHeader();
                     if (corsOptions.AllowCredentials && corsOptions.AllowedOrigins.Length > 0)
                     {
                         policy.AllowCredentials();
@@ -151,7 +155,8 @@ public static class ApiServiceCollectionExtensions
 
     private static void AddAuthorizationPolicies(IServiceCollection services)
     {
-        services.AddAuthorizationBuilder()
+        services
+            .AddAuthorizationBuilder()
             .AddPolicy(
                 AuthConstants.Policies.AdminOnly,
                 policy => policy.RequireClaim(AuthConstants.Claims.IsAdmin, "True")

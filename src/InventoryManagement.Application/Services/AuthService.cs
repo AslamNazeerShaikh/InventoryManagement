@@ -42,7 +42,8 @@ public sealed class AuthService : IAuthService
         CancellationToken cancellationToken = default
     )
     {
-        var user = await _unitOfWork.Users.GetByEmailAsync(loginDto.Email, cancellationToken)
+        var user = await _unitOfWork
+            .Users.GetByEmailAsync(loginDto.Email, cancellationToken)
             .ConfigureAwait(false);
 
         // Uniform failure for missing user or bad password to prevent account enumeration.
@@ -109,7 +110,8 @@ public sealed class AuthService : IAuthService
         CancellationToken cancellationToken = default
     )
     {
-        var user = await _unitOfWork.Users.GetByIdAsync(userId, cancellationToken)
+        var user = await _unitOfWork
+            .Users.GetByIdAsync(userId, cancellationToken)
             .ConfigureAwait(false);
         if (user is null)
         {
@@ -131,7 +133,8 @@ public sealed class AuthService : IAuthService
         CancellationToken cancellationToken = default
     )
     {
-        var user = await _unitOfWork.Users.GetByIdAsync(userId, cancellationToken)
+        var user = await _unitOfWork
+            .Users.GetByIdAsync(userId, cancellationToken)
             .ConfigureAwait(false);
         if (user is null)
         {

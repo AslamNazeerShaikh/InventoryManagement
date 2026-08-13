@@ -33,17 +33,23 @@ public sealed class DashboardService : IDashboardService
         // Sequential counts against the shared scoped context (no concurrent DbContext use).
         var stats = new DashboardStatsDto
         {
-            TotalInventories = await _unitOfWork.Inventories.CountAsync(
-                cancellationToken: cancellationToken
-            )
+            TotalInventories = await _unitOfWork
+                .Inventories.CountAsync(cancellationToken: cancellationToken)
                 .ConfigureAwait(false),
             AvailableInventories = await _unitOfWork
-                .Inventories.CountAsync(x => x.Status == InventoryStatus.Available, cancellationToken)
+                .Inventories.CountAsync(
+                    x => x.Status == InventoryStatus.Available,
+                    cancellationToken
+                )
                 .ConfigureAwait(false),
             AssignedInventories = await _unitOfWork
-                .Inventories.CountAsync(x => x.Status == InventoryStatus.Assigned, cancellationToken)
+                .Inventories.CountAsync(
+                    x => x.Status == InventoryStatus.Assigned,
+                    cancellationToken
+                )
                 .ConfigureAwait(false),
-            TotalUsers = await _unitOfWork.Users.CountAsync(cancellationToken: cancellationToken)
+            TotalUsers = await _unitOfWork
+                .Users.CountAsync(cancellationToken: cancellationToken)
                 .ConfigureAwait(false),
             ActiveAssignments = await _unitOfWork
                 .InventoryAssignments.CountAsync(
@@ -110,9 +116,7 @@ public sealed class DashboardService : IDashboardService
         var assignments = await _unitOfWork
             .InventoryAssignments.ListAsync(
                 include: q =>
-                    q.Include(x => x.Inventory)
-                        .Include(x => x.User)
-                        .Include(x => x.AssignedByUser),
+                    q.Include(x => x.Inventory).Include(x => x.User).Include(x => x.AssignedByUser),
                 orderBy: q => q.OrderByDescending(x => x.AssignedDate),
                 take: count,
                 cancellationToken: cancellationToken
@@ -126,7 +130,9 @@ public sealed class DashboardService : IDashboardService
         CancellationToken cancellationToken = default
     )
     {
-        var expiryDate = DateTime.UtcNow.AddMonths(BusinessConstants.ExpiryAlert.DefaultMonthsBefore);
+        var expiryDate = DateTime.UtcNow.AddMonths(
+            BusinessConstants.ExpiryAlert.DefaultMonthsBefore
+        );
         var expiring = await _unitOfWork
             .Inventories.GetExpiringInventoriesAsync(expiryDate, cancellationToken)
             .ConfigureAwait(false);
@@ -152,9 +158,8 @@ public sealed class DashboardService : IDashboardService
         CancellationToken cancellationToken = default
     )
     {
-        var overdue = await _unitOfWork.InventoryAssignments.GetOverdueAssignmentsAsync(
-            cancellationToken
-        )
+        var overdue = await _unitOfWork
+            .InventoryAssignments.GetOverdueAssignmentsAsync(cancellationToken)
             .ConfigureAwait(false);
         return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Success(overdue.ToDto());
     }

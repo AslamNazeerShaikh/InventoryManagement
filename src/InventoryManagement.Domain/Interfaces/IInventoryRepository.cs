@@ -7,7 +7,10 @@ namespace InventoryManagement.Domain.Interfaces;
 public interface IInventoryRepository : IGenericRepository<Inventory>
 {
     /// <summary>Finds an inventory item by barcode, or <c>null</c>.</summary>
-    Task<Inventory?> GetByBarcodeAsync(string barcode, CancellationToken cancellationToken = default);
+    Task<Inventory?> GetByBarcodeAsync(
+        string barcode,
+        CancellationToken cancellationToken = default
+    );
 
     /// <summary>Lists available items expiring on or before <paramref name="beforeDate"/>, ordered by expiry.</summary>
     Task<IReadOnlyList<Inventory>> GetExpiringInventoriesAsync(

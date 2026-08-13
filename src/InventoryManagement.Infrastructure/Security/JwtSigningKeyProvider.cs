@@ -16,7 +16,9 @@ namespace InventoryManagement.Infrastructure.Security;
 public interface IJwtSigningKeyProvider
 {
     /// <summary>Returns credentials (key + algorithm) used to sign newly issued access tokens.</summary>
-    Task<SigningCredentials> GetSigningCredentialsAsync(CancellationToken cancellationToken = default);
+    Task<SigningCredentials> GetSigningCredentialsAsync(
+        CancellationToken cancellationToken = default
+    );
 
     /// <summary>Returns the symmetric key used to validate incoming access tokens.</summary>
     Task<SecurityKey> GetValidationKeyAsync(CancellationToken cancellationToken = default);

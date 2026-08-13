@@ -42,7 +42,14 @@ public class InventoryController : ControllerBase
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 10,
         CancellationToken cancellationToken = default
-    ) => Ok(await _inventoryService.GetInventoriesPagedAsync(pageNumber, pageSize, cancellationToken));
+    ) =>
+        Ok(
+            await _inventoryService.GetInventoriesPagedAsync(
+                pageNumber,
+                pageSize,
+                cancellationToken
+            )
+        );
 
     /// <summary>Gets an inventory item by identifier.</summary>
     [HttpGet("{id:int}")]
@@ -91,7 +98,9 @@ public class InventoryController : ControllerBase
             BusinessConstants.ExpiryAlert.MinMonthsBefore,
             BusinessConstants.ExpiryAlert.MaxMonthsBefore
         );
-        return Ok(await _inventoryService.GetExpiringInventoriesAsync(monthsBefore, cancellationToken));
+        return Ok(
+            await _inventoryService.GetExpiringInventoriesAsync(monthsBefore, cancellationToken)
+        );
     }
 
     /// <summary>Gets inventory items at or below the given stock threshold.</summary>
