@@ -1,4 +1,5 @@
 using InventoryManagement.Application.Mapping;
+using InventoryManagement.Domain.Common;
 using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.DTOs;
 using InventoryManagement.Domain.Interfaces;
@@ -28,7 +29,7 @@ public sealed class UserService : IUserService
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<IEnumerable<UserDto>>> GetAllUsersAsync(
+    public async Task<Result<IEnumerable<UserDto>>> GetAllUsersAsync(
         CancellationToken cancellationToken = default
     )
     {
@@ -38,11 +39,11 @@ public sealed class UserService : IUserService
                 cancellationToken: cancellationToken
             )
             .ConfigureAwait(false);
-        return ApiResponse<IEnumerable<UserDto>>.Success(users.ToDto());
+        return Result<IEnumerable<UserDto>>.Success(users.ToDto());
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<UserDto>> GetUserByIdAsync(
+    public async Task<Result<UserDto>> GetUserByIdAsync(
         int id,
         CancellationToken cancellationToken = default
     )
@@ -51,12 +52,12 @@ public sealed class UserService : IUserService
             .Users.GetByIdAsync(id, cancellationToken)
             .ConfigureAwait(false);
         return user is null
-            ? ApiResponse<UserDto>.Failure("User not found")
-            : ApiResponse<UserDto>.Success(user.ToDto());
+            ? Result<UserDto>.NotFound("User not found")
+            : Result<UserDto>.Success(user.ToDto());
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<UserDto>> GetUserByEmailAsync(
+    public async Task<Result<UserDto>> GetUserByEmailAsync(
         string email,
         CancellationToken cancellationToken = default
     )
@@ -65,12 +66,12 @@ public sealed class UserService : IUserService
             .Users.GetByEmailAsync(email, cancellationToken)
             .ConfigureAwait(false);
         return user is null
-            ? ApiResponse<UserDto>.Failure("User not found")
-            : ApiResponse<UserDto>.Success(user.ToDto());
+            ? Result<UserDto>.NotFound("User not found")
+            : Result<UserDto>.Success(user.ToDto());
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<UserDto>> CreateUserAsync(
+    public async Task<Result<UserDto>> CreateUserAsync(
         CreateUserDto createUserDto,
         CancellationToken cancellationToken = default
     )
@@ -81,7 +82,7 @@ public sealed class UserService : IUserService
                 .ConfigureAwait(false)
         )
         {
-            return ApiResponse<UserDto>.Failure("Email already exists");
+            return Result<UserDto>.Conflict("Email already exists");
         }
 
         var user = createUserDto.ToEntity();
@@ -91,11 +92,11 @@ public sealed class UserService : IUserService
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Created user {UserId} ({Email}).", user.Id, user.Email);
-        return ApiResponse<UserDto>.Success(user.ToDto(), "User created successfully");
+        return Result<UserDto>.Success(user.ToDto(), "User created successfully");
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<UserDto>> UpdateUserAsync(
+    public async Task<Result<UserDto>> UpdateUserAsync(
         int id,
         UpdateUserDto updateUserDto,
         CancellationToken cancellationToken = default
@@ -106,7 +107,7 @@ public sealed class UserService : IUserService
             .ConfigureAwait(false);
         if (user is null)
         {
-            return ApiResponse<UserDto>.Failure("User not found");
+            return Result<UserDto>.NotFound("User not found");
         }
 
         if (
@@ -116,18 +117,18 @@ public sealed class UserService : IUserService
                 .ConfigureAwait(false)
         )
         {
-            return ApiResponse<UserDto>.Failure("Email already exists");
+            return Result<UserDto>.Conflict("Email already exists");
         }
 
         updateUserDto.UpdateEntity(user);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Updated user {UserId}.", id);
-        return ApiResponse<UserDto>.Success(user.ToDto(), "User updated successfully");
+        return Result<UserDto>.Success(user.ToDto(), "User updated successfully");
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<bool>> DeleteUserAsync(
+    public async Task<Result<bool>> DeleteUserAsync(
         int id,
         CancellationToken cancellationToken = default
     )
@@ -137,7 +138,7 @@ public sealed class UserService : IUserService
             .ConfigureAwait(false);
         if (user is null)
         {
-            return ApiResponse<bool>.Failure("User not found");
+            return Result<bool>.NotFound("User not found");
         }
 
         user.IsDeleted = true;
@@ -145,33 +146,33 @@ public sealed class UserService : IUserService
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Soft-deleted user {UserId}.", id);
-        return ApiResponse<bool>.Success(true, "User deleted successfully");
+        return Result<bool>.Success(true, "User deleted successfully");
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<IEnumerable<UserDto>>> GetNursePractitionersAsync(
+    public async Task<Result<IEnumerable<UserDto>>> GetNursePractitionersAsync(
         CancellationToken cancellationToken = default
     )
     {
         var nurses = await _unitOfWork
             .Users.GetNursePractitionersAsync(cancellationToken)
             .ConfigureAwait(false);
-        return ApiResponse<IEnumerable<UserDto>>.Success(nurses.ToDto());
+        return Result<IEnumerable<UserDto>>.Success(nurses.ToDto());
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<IEnumerable<UserDto>>> GetActiveUsersAsync(
+    public async Task<Result<IEnumerable<UserDto>>> GetActiveUsersAsync(
         CancellationToken cancellationToken = default
     )
     {
         var users = await _unitOfWork
             .Users.GetActiveUsersAsync(cancellationToken)
             .ConfigureAwait(false);
-        return ApiResponse<IEnumerable<UserDto>>.Success(users.ToDto());
+        return Result<IEnumerable<UserDto>>.Success(users.ToDto());
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<PagedResult<UserDto>>> GetUsersPagedAsync(
+    public async Task<Result<PagedResult<UserDto>>> GetUsersPagedAsync(
         int pageNumber,
         int pageSize,
         CancellationToken cancellationToken = default
@@ -196,6 +197,6 @@ public sealed class UserService : IUserService
             PageSize = pageSize,
         };
 
-        return ApiResponse<PagedResult<UserDto>>.Success(result);
+        return Result<PagedResult<UserDto>>.Success(result);
     }
 }

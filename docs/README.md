@@ -4,7 +4,7 @@
 
 Welcome to the comprehensive documentation for the **Inventory Management System** - a robust solution for managing medical equipment inventory with expiry tracking, assignment management, and real-time visibility designed for healthcare environments with Nurse Practitioners.
 
-The latest implementation includes a security/architecture hardening refactor: unified JWT configuration, Microsoft PBKDF2 password hashing, hashed refresh tokens, authenticated idempotency, optimistic concurrency, centralized exception handling, automatic validation, configurable CORS/rate limiting, structured Serilog logging, and `/health` checks.
+The latest implementation includes a security/architecture hardening refactor and a Result design pattern for application outcomes: unified JWT configuration, Microsoft PBKDF2 password hashing, hashed refresh tokens, authenticated idempotency, optimistic concurrency, centralized exception handling, automatic validation, configurable CORS/rate limiting, structured Serilog logging, and `/health` checks. HTTP response bodies still use the `ApiResponse<T>` envelope (`isSuccess`, `message`, `data`, `errors`) so client JSON shape remains stable.
 
 ## 🗂️ Documentation Structure
 
@@ -40,6 +40,7 @@ The latest implementation includes a security/architecture hardening refactor: u
 
 - **Core Entities**: User, Inventory, InventoryAssignment, IdempotentRequest, and BaseEntity
 - **DTOs & Validation**: Request/response models with DataAnnotations and automatic API validation
+- **Result Pattern**: `Result<T>` service outcomes mapped to HTTP status codes by the API layer
 - **Security Abstractions**: `JwtOptions`, `ITokenService`, `IPasswordHasher`, `ISecretClient`
 - **Repository Interfaces**: Read-optimized data access contracts with cancellation support
 
@@ -54,6 +55,7 @@ The latest implementation includes a security/architecture hardening refactor: u
 - **Clean Architecture Layers**: Presentation, Application, Domain, and Infrastructure separation
 - **Security Pipeline**: JWT key resolution, token validation, rate limiting, CORS, and health checks
 - **Idempotency Flow**: Authenticated locking, request hashing, replay, bounded caching, and cleanup
+- **Result + Response Mapping**: Application services return `Result<T>`; `ApiControllerBase` maps outcomes to HTTP status codes while preserving `ApiResponse<T>` bodies
 - **Error Handling**: Centralized `IExceptionHandler` and uniform `ApiResponse` responses
 
 **🎯 Use this when**: You need to understand how data moves through the system.
@@ -112,6 +114,23 @@ Current configuration sections are:
 - `SeedData` - admin email/password seeding.
 
 JWT signing keys can be supplied locally with inline configuration, user-secrets, environment overrides, or mounted files. For cloud secret stores, use `Jwt:KeySource=CloudSecret`, set `Jwt:KeySecretName`, and register a cloud-backed `ISecretClient`. Keys under 256 bits are rejected at startup. The old `JwtSettings`, `CORS`, and `ApiSettings` sections are no longer used.
+
+### Result Pattern & API Responses
+
+Application services return `Result<T>` for expected business outcomes instead of throwing. Controllers inherit from `ApiControllerBase`, which maps each `ResultErrorType` to an HTTP status code while keeping the response body as `ApiResponse<T>`.
+
+| Result outcome | HTTP status | ApiResponse body |
+| -------------- | ----------- | ---------------- |
+| `Success` | 200 OK, or 201 Created for create endpoints | `isSuccess: true`, `message`, `data`, empty `errors` |
+| `NotFound` | 404 Not Found | `isSuccess: false`, `message`, `errors` |
+| `Conflict` | 409 Conflict | `isSuccess: false`, `message`, `errors` |
+| `Validation` | 400 Bad Request | `isSuccess: false`, `message`, `errors` |
+| `Unauthorized` | 401 Unauthorized | `isSuccess: false`, `message`, `errors` |
+| `Forbidden` | 403 Forbidden | `isSuccess: false`, `message`, `errors` |
+| `Failure` | 400 Bad Request | `isSuccess: false`, `message`, `errors` |
+
+Examples: missing entities return 404, duplicate barcode/email conflicts return 409, and invalid login returns 401 without changing the JSON envelope.
+
 
 ### Troubleshooting Startup
 
@@ -192,7 +211,7 @@ The Application layer no longer depends on Infrastructure; options and security 
 
 ### Technology Stack
 
-- **Framework**: ASP.NET Core with controllers and automatic model validation
+- **Framework**: ASP.NET Core with controllers, automatic model validation, and `ApiControllerBase` Result mapping
 - **Database**: SQLite with Entity Framework Core
 - **Authentication**: JWT bearer tokens with HMAC-SHA256 signing keys resolved by `IJwtSigningKeyProvider`
 - **Password Hashing**: Microsoft `PasswordHasher` (PBKDF2-HMAC-SHA256)
@@ -263,7 +282,7 @@ The Application layer no longer depends on Infrastructure; options and security 
 - ✅ **Data Flow & Architecture**: System patterns and implementation guidance
 - ✅ **Overview Documentation**: Navigation and quick start guide
 
-All documentation is current as of the security/architecture hardening refactor.
+All documentation is current as of the security/architecture hardening and Result-pattern refactor.
 
 ---
 

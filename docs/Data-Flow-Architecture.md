@@ -26,7 +26,7 @@ The Inventory Management System follows **Clean Architecture** principles with c
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ • Business Logic Services (AuthService, UserService, etc.)                 │
 │ • DTO Mapping (Entity ↔ DTO conversions)                                  │
-│ • Business Rules Validation                                                │
+│ • Business Rules Validation via Result<T> outcomes                         │
 │ • CancellationToken propagation                                            │
 │ • Depends on Domain abstractions only                                      │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -37,7 +37,7 @@ The Inventory Management System follows **Clean Architecture** principles with c
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ • Domain Entities and IdempotentRequest model                              │
 │ • Repository, UnitOfWork, Token, Hasher, Secret interfaces                 │
-│ • DTOs, Enums, Options, Constants, Domain Exceptions                       │
+│ • Result types, DTOs, Enums, Options, Constants, Domain Exceptions         │
 └─────────────────────────────────────────────────────────────────────────────┘
                                       ↓
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -177,21 +177,48 @@ Validate key length and SHA-256 hash request body
 HTTP Request → Exception Handler → HTTPS/Serilog → Routing → CORS → Rate Limiter
              → Authentication → Authorization → Idempotency (if applicable)
              → Controller → Automatic Model Validation → Business Logic
-             → Repository/UnitOfWork → ApiResponse<T>
+             → Repository/UnitOfWork → Result<T> → ApiControllerBase
+             → ApiResponse<T> body with mapped HTTP status
 ```
 
-### 2. Error Handling Pattern
+### 2. Result-to-HTTP Mapping Pattern
+
+Application services return `Result<T>` for expected outcomes. `ApiControllerBase.HandleResult(...)` maps the result to the transport status and wraps the same message/data/errors in the stable `ApiResponse<T>` envelope.
+
+| Result outcome | HTTP status | Notes |
+| -------------- | ----------- | ----- |
+| Success | 200 OK | Create endpoints can use a success factory for 201 Created |
+| NotFound | 404 Not Found | Missing entity/resource |
+| Conflict | 409 Conflict | Duplicate data or current-state conflict |
+| Validation | 400 Bad Request | Business validation/precondition failure |
+| Unauthorized | 401 Unauthorized | Invalid credentials/refresh token |
+| Forbidden | 403 Forbidden | Authenticated caller lacks permission |
+| Failure | 400 Bad Request | Generic business-rule failure |
+
+The HTTP response body remains unchanged for clients:
+
+```json
+{
+  "isSuccess": false,
+  "message": "Inventory not found",
+  "data": null,
+  "errors": []
+}
+```
+
+### 3. Error Handling Pattern
 
 ```
 Exception/Validation Error → GlobalExceptionHandler or ApiBehaviorOptions → ApiResponse
 ```
 
-**Exception Mapping:**
+**Unhandled/Exception Mapping:**
 
-- 400: Generic domain exception / bad request
-- 403: Unauthorized operation
-- 404: Entity not found
-- 409: Duplicate entity or concurrency conflict
+- 400: Generic domain exception / bad request; generic `Result.Failure`
+- 401: `Result.Unauthorized` (for example invalid login)
+- 403: Unauthorized operation / `Result.Forbidden`
+- 404: Entity not found / `Result.NotFound`
+- 409: Duplicate entity, state conflict, or concurrency conflict / `Result.Conflict`
 - 422: Insufficient inventory, expired inventory, invalid business operation, idempotency key mismatch
 - 429: Auth rate limit exceeded
 - 500: Unexpected internal error with generic message
@@ -207,26 +234,26 @@ Exception/Validation Error → GlobalExceptionHandler or ApiBehaviorOptions → 
 }
 ```
 
-Services and handlers log internal details server-side; unknown errors return `An unexpected error occurred.` to clients.
+Services return `Result<T>` for expected failures. Handlers log internal details server-side; unknown errors return `An unexpected error occurred.` to clients.
 
 ---
 
 ## Data Transformation Patterns
 
-### 1. Entity ↔ DTO Mapping
+### 1. Entity ↔ DTO Mapping with Result<T>
 
 ```csharp
-public async Task<ApiResponse<InventoryDto>> GetInventoryByIdAsync(
+public async Task<Result<InventoryDto>> GetInventoryByIdAsync(
     int id,
     CancellationToken cancellationToken)
 {
     var inventory = await _unitOfWork.Inventories.GetByIdAsync(id, cancellationToken);
     if (inventory is null)
     {
-        return ApiResponse<InventoryDto>.Failure("Inventory item not found");
+        return Result<InventoryDto>.NotFound("Inventory not found");
     }
 
-    return ApiResponse<InventoryDto>.Success(inventory.ToDto());
+    return Result<InventoryDto>.Success(inventory.ToDto());
 }
 ```
 
@@ -286,7 +313,7 @@ builder.Services.AddApplicationServices();
 builder.Services.AddApiServices(builder.Configuration, builder.Environment);
 ```
 
-**API registrations include:** controllers with custom validation responses, `GlobalExceptionHandler`, CORS, JWT bearer authentication, authorization policies, fixed-window auth rate limiting, and health checks.
+**API registrations include:** controllers with custom validation responses, `ApiControllerBase` Result mapping, `GlobalExceptionHandler`, CORS, JWT bearer authentication, authorization policies, fixed-window auth rate limiting, and health checks.
 
 **Infrastructure registrations include:** `AppDbContext`, repositories, `IUnitOfWork`, `IdentityPasswordHasher`, `TokenService`, `EnvironmentFileSecretClient`, `JwtSigningKeyProvider`, `EfIdempotencyStore`, and `IdempotencyCleanupService`.
 

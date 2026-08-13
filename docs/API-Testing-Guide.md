@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide provides step-by-step instructions for testing all API endpoints in the correct sequence. It reflects the current security hardening: unified JWT config, hashed refresh tokens, automatic model validation, auth rate limiting, idempotency, concurrency handling, and `/health`.
+This guide provides step-by-step instructions for testing all API endpoints in the correct sequence. It reflects the current security hardening and Result pattern: unified JWT config, hashed refresh tokens, automatic model validation, auth rate limiting, idempotency, concurrency handling, accurate HTTP status codes, and `/health`.
 
 ## Base URL
 
@@ -59,9 +59,33 @@ Content-Type: application/json
 }
 ```
 
-Save the JWT access token for `Authorization: Bearer <accessToken>`. Save the refresh token; the server stores only its SHA-256 hash.
+Save the JWT access token and send it in the Authorization header using the bearer-token scheme. Save the refresh token; the server stores only its SHA-256 hash.
 
 ---
+
+## Response Contract and Status Codes
+
+Application services use `Result<T>` to express expected outcomes. Controllers map those outcomes to accurate HTTP status codes, but the JSON body remains the same `ApiResponse<T>` envelope:
+
+```json
+{
+  "isSuccess": false,
+  "message": "Inventory not found",
+  "data": null,
+  "errors": []
+}
+```
+
+| Scenario | Expected status |
+| -------- | --------------- |
+| Successful read/update/delete | 200 OK |
+| Successful create | 201 Created |
+| Missing entity | 404 Not Found |
+| Duplicate email/barcode/serial or concurrency conflict | 409 Conflict |
+| DTO validation or generic business failure | 400 Bad Request |
+| Invalid credentials/refresh token | 401 Unauthorized |
+| Authenticated caller lacks a policy | 403 Forbidden |
+| Auth rate limit exceeded | 429 Too Many Requests |
 
 ## Testing Flow by Controller
 
@@ -629,7 +653,7 @@ Content-Type: application/json
 }
 ```
 
-**Expected:** 400/422 with business rule violation depending on service/exception path.
+**Expected:** 400 Bad Request with the `ApiResponse` error message from `Result.Failure`.
 
 #### Concurrent Assignment Conflict
 

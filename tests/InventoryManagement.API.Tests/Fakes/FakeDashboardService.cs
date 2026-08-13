@@ -1,3 +1,4 @@
+using InventoryManagement.Domain.Common;
 using InventoryManagement.Domain.DTOs;
 using InventoryManagement.Domain.Interfaces;
 
@@ -5,7 +6,7 @@ namespace InventoryManagement.API.Tests.Fakes;
 
 /// <summary>
 /// Hand-rolled fake of <see cref="IDashboardService"/> that records arguments and returns canned
-/// successful responses, avoiding a mocking-library dependency.
+/// successful results, avoiding a mocking-library dependency.
 /// </summary>
 public sealed class FakeDashboardService : IDashboardService
 {
@@ -16,50 +17,46 @@ public sealed class FakeDashboardService : IDashboardService
     public DashboardStatsDto StatsToReturn { get; set; } = new() { TotalInventories = 7 };
 
     /// <inheritdoc />
-    public Task<ApiResponse<DashboardStatsDto>> GetDashboardStatsAsync(
+    public Task<Result<DashboardStatsDto>> GetDashboardStatsAsync(
         CancellationToken cancellationToken = default
-    ) => Task.FromResult(ApiResponse<DashboardStatsDto>.Success(StatsToReturn));
+    ) => Task.FromResult(Result<DashboardStatsDto>.Success(StatsToReturn));
 
     /// <inheritdoc />
-    public Task<ApiResponse<IEnumerable<InventoryDto>>> GetRecentInventoriesAsync(
+    public Task<Result<IEnumerable<InventoryDto>>> GetRecentInventoriesAsync(
         int count = 10,
         CancellationToken cancellationToken = default
     )
     {
         LastRecentInventoriesCount = count;
         return Task.FromResult(
-            ApiResponse<IEnumerable<InventoryDto>>.Success(new List<InventoryDto>())
+            Result<IEnumerable<InventoryDto>>.Success(new List<InventoryDto>())
         );
     }
 
     /// <inheritdoc />
-    public Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetRecentAssignmentsAsync(
+    public Task<Result<IEnumerable<InventoryAssignmentDto>>> GetRecentAssignmentsAsync(
         int count = 10,
         CancellationToken cancellationToken = default
     ) =>
         Task.FromResult(
-            ApiResponse<IEnumerable<InventoryAssignmentDto>>.Success(
-                new List<InventoryAssignmentDto>()
-            )
+            Result<IEnumerable<InventoryAssignmentDto>>.Success(new List<InventoryAssignmentDto>())
         );
 
     /// <inheritdoc />
-    public Task<ApiResponse<IEnumerable<InventoryDto>>> GetExpiryAlertsAsync(
+    public Task<Result<IEnumerable<InventoryDto>>> GetExpiryAlertsAsync(
         CancellationToken cancellationToken = default
-    ) => Task.FromResult(ApiResponse<IEnumerable<InventoryDto>>.Success(new List<InventoryDto>()));
+    ) => Task.FromResult(Result<IEnumerable<InventoryDto>>.Success(new List<InventoryDto>()));
 
     /// <inheritdoc />
-    public Task<ApiResponse<IEnumerable<InventoryDto>>> GetLowStockAlertsAsync(
+    public Task<Result<IEnumerable<InventoryDto>>> GetLowStockAlertsAsync(
         CancellationToken cancellationToken = default
-    ) => Task.FromResult(ApiResponse<IEnumerable<InventoryDto>>.Success(new List<InventoryDto>()));
+    ) => Task.FromResult(Result<IEnumerable<InventoryDto>>.Success(new List<InventoryDto>()));
 
     /// <inheritdoc />
-    public Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetOverdueAlertsAsync(
+    public Task<Result<IEnumerable<InventoryAssignmentDto>>> GetOverdueAlertsAsync(
         CancellationToken cancellationToken = default
     ) =>
         Task.FromResult(
-            ApiResponse<IEnumerable<InventoryAssignmentDto>>.Success(
-                new List<InventoryAssignmentDto>()
-            )
+            Result<IEnumerable<InventoryAssignmentDto>>.Success(new List<InventoryAssignmentDto>())
         );
 }

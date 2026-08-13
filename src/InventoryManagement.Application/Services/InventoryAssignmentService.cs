@@ -1,4 +1,5 @@
 using InventoryManagement.Application.Mapping;
+using InventoryManagement.Domain.Common;
 using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.DTOs;
 using InventoryManagement.Domain.Entities;
@@ -29,7 +30,7 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetAllAssignmentsAsync(
+    public async Task<Result<IEnumerable<InventoryAssignmentDto>>> GetAllAssignmentsAsync(
         CancellationToken cancellationToken = default
     )
     {
@@ -41,11 +42,11 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
                 cancellationToken: cancellationToken
             )
             .ConfigureAwait(false);
-        return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Success(assignments.ToDto());
+        return Result<IEnumerable<InventoryAssignmentDto>>.Success(assignments.ToDto());
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<InventoryAssignmentDto>> GetAssignmentByIdAsync(
+    public async Task<Result<InventoryAssignmentDto>> GetAssignmentByIdAsync(
         int id,
         CancellationToken cancellationToken = default
     )
@@ -63,12 +64,12 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
             .ConfigureAwait(false);
 
         return assignment is null
-            ? ApiResponse<InventoryAssignmentDto>.Failure("Assignment not found")
-            : ApiResponse<InventoryAssignmentDto>.Success(assignment.ToDto());
+            ? Result<InventoryAssignmentDto>.NotFound("Assignment not found")
+            : Result<InventoryAssignmentDto>.Success(assignment.ToDto());
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<InventoryAssignmentDto>> CreateAssignmentAsync(
+    public async Task<Result<InventoryAssignmentDto>> CreateAssignmentAsync(
         CreateInventoryAssignmentDto createAssignmentDto,
         int assignedByUserId,
         CancellationToken cancellationToken = default
@@ -137,20 +138,20 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
 
         if (!outcome.Success)
         {
-            return ApiResponse<InventoryAssignmentDto>.Failure(outcome.Error!);
+            return Result<InventoryAssignmentDto>.Failure(outcome.Error!);
         }
 
         _logger.LogInformation("Created assignment {AssignmentId}.", outcome.AssignmentId);
         var created = await LoadForDtoAsync(outcome.AssignmentId, cancellationToken)
             .ConfigureAwait(false);
-        return ApiResponse<InventoryAssignmentDto>.Success(
+        return Result<InventoryAssignmentDto>.Success(
             created!.ToDto(),
             "Assignment created successfully"
         );
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<InventoryAssignmentDto>> UpdateAssignmentAsync(
+    public async Task<Result<InventoryAssignmentDto>> UpdateAssignmentAsync(
         int id,
         UpdateInventoryAssignmentDto updateAssignmentDto,
         CancellationToken cancellationToken = default
@@ -220,19 +221,19 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
 
         if (!outcome.Success)
         {
-            return ApiResponse<InventoryAssignmentDto>.Failure(outcome.Error!);
+            return Result<InventoryAssignmentDto>.Failure(outcome.Error!);
         }
 
         _logger.LogInformation("Updated assignment {AssignmentId}.", id);
         var updated = await LoadForDtoAsync(id, cancellationToken).ConfigureAwait(false);
-        return ApiResponse<InventoryAssignmentDto>.Success(
+        return Result<InventoryAssignmentDto>.Success(
             updated!.ToDto(),
             "Assignment updated successfully"
         );
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<bool>> ReturnAssignmentAsync(
+    public async Task<Result<bool>> ReturnAssignmentAsync(
         ReturnInventoryAssignmentDto returnAssignmentDto,
         int returnedToUserId,
         CancellationToken cancellationToken = default
@@ -292,18 +293,18 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
 
         if (!outcome.Success)
         {
-            return ApiResponse<bool>.Failure(outcome.Error!);
+            return Result<bool>.Failure(outcome.Error!);
         }
 
         _logger.LogInformation(
             "Returned assignment {AssignmentId}.",
             returnAssignmentDto.AssignmentId
         );
-        return ApiResponse<bool>.Success(true, "Assignment returned successfully");
+        return Result<bool>.Success(true, "Assignment returned successfully");
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetAssignmentsByUserIdAsync(
+    public async Task<Result<IEnumerable<InventoryAssignmentDto>>> GetAssignmentsByUserIdAsync(
         int userId,
         CancellationToken cancellationToken = default
     )
@@ -311,44 +312,44 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
         var assignments = await _unitOfWork
             .InventoryAssignments.GetAssignmentsByUserIdAsync(userId, cancellationToken)
             .ConfigureAwait(false);
-        return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Success(assignments.ToDto());
+        return Result<IEnumerable<InventoryAssignmentDto>>.Success(assignments.ToDto());
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetActiveAssignmentsAsync(
+    public async Task<Result<IEnumerable<InventoryAssignmentDto>>> GetActiveAssignmentsAsync(
         CancellationToken cancellationToken = default
     )
     {
         var assignments = await _unitOfWork
             .InventoryAssignments.GetActiveAssignmentsAsync(cancellationToken)
             .ConfigureAwait(false);
-        return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Success(assignments.ToDto());
+        return Result<IEnumerable<InventoryAssignmentDto>>.Success(assignments.ToDto());
     }
 
     /// <inheritdoc />
     public async Task<
-        ApiResponse<IEnumerable<InventoryAssignmentDto>>
+        Result<IEnumerable<InventoryAssignmentDto>>
     > GetActiveAssignmentsByUserIdAsync(int userId, CancellationToken cancellationToken = default)
     {
         var assignments = await _unitOfWork
             .InventoryAssignments.GetActiveAssignmentsByUserIdAsync(userId, cancellationToken)
             .ConfigureAwait(false);
-        return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Success(assignments.ToDto());
+        return Result<IEnumerable<InventoryAssignmentDto>>.Success(assignments.ToDto());
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetOverdueAssignmentsAsync(
+    public async Task<Result<IEnumerable<InventoryAssignmentDto>>> GetOverdueAssignmentsAsync(
         CancellationToken cancellationToken = default
     )
     {
         var assignments = await _unitOfWork
             .InventoryAssignments.GetOverdueAssignmentsAsync(cancellationToken)
             .ConfigureAwait(false);
-        return ApiResponse<IEnumerable<InventoryAssignmentDto>>.Success(assignments.ToDto());
+        return Result<IEnumerable<InventoryAssignmentDto>>.Success(assignments.ToDto());
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<AssignmentHistoryDto>> GetAssignmentHistoryAsync(
+    public async Task<Result<AssignmentHistoryDto>> GetAssignmentHistoryAsync(
         int inventoryId,
         CancellationToken cancellationToken = default
     )
@@ -358,7 +359,7 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
             .ConfigureAwait(false);
         if (inventory is null)
         {
-            return ApiResponse<AssignmentHistoryDto>.Failure("Inventory not found");
+            return Result<AssignmentHistoryDto>.NotFound("Inventory not found");
         }
 
         var assignments = await _unitOfWork
@@ -372,11 +373,11 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
             Assignments = assignments.ToDto().ToList(),
         };
 
-        return ApiResponse<AssignmentHistoryDto>.Success(historyDto);
+        return Result<AssignmentHistoryDto>.Success(historyDto);
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<PagedResult<InventoryAssignmentDto>>> GetAssignmentsPagedAsync(
+    public async Task<Result<PagedResult<InventoryAssignmentDto>>> GetAssignmentsPagedAsync(
         int pageNumber,
         int pageSize,
         CancellationToken cancellationToken = default
@@ -404,7 +405,7 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
             PageSize = pageSize,
         };
 
-        return ApiResponse<PagedResult<InventoryAssignmentDto>>.Success(result);
+        return Result<PagedResult<InventoryAssignmentDto>>.Success(result);
     }
 
     /// <summary>Loads a single assignment (tracking-free) with its related graph for projection.</summary>

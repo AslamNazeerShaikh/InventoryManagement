@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document provides a comprehensive overview of the database schema, including table structures, relationships, constraints, idempotency storage, optimistic concurrency, and data flow patterns.
+This document provides a comprehensive overview of the database schema, including table structures, relationships, constraints, idempotency storage, optimistic concurrency, secure authentication storage, and data flow patterns. API-layer `Result<T>` outcomes map database conflicts/not-found cases to accurate HTTP status codes while preserving the `ApiResponse<T>` body.
 
 ## Database Technology
 
@@ -276,7 +276,7 @@ Admin/Provider → ExecuteInTransactionAsync → Validate inventory/user/quantit
                                     Save with ConcurrencyToken check
 ```
 
-Concurrent conflicting updates raise a concurrency exception and return HTTP 409 instead of silently overselling.
+Concurrent conflicting updates raise a concurrency exception and return HTTP 409 instead of silently overselling; duplicate email/barcode/serial conflicts are also surfaced as 409 by the Result mapping layer.
 
 ### 4. Idempotency Flow
 
@@ -344,6 +344,7 @@ Mutating request + Idempotency-Key → Authenticate first → Hash request body
 - **Added**: `ConcurrencyToken` to Users, Inventories, InventoryAssignments
 - **Added**: `RequestHash`, `CompletedAt`, `LockExpiresAt`, `ExpiresAt` to IdempotentRequests
 - **Added Indexes**: `IX_IdempotentRequests_LockExpiresAt`, `IX_IdempotentRequests_ExpiresAt`
+- **Configured Limits**: `IdempotencyKey` max 512 and `ResponseBody` max 1048576 characters at the EF model layer
 - **Dropped Index**: `IX_IdempotentRequests_CreatedAt`
 
 ### 2. Migration Commands

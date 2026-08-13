@@ -1,4 +1,5 @@
 using InventoryManagement.Application.Mapping;
+using InventoryManagement.Domain.Common;
 using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.DTOs;
 using InventoryManagement.Domain.Entities;
@@ -24,7 +25,7 @@ public sealed class InventoryService : IInventoryService
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<IEnumerable<InventoryDto>>> GetAllInventoriesAsync(
+    public async Task<Result<IEnumerable<InventoryDto>>> GetAllInventoriesAsync(
         CancellationToken cancellationToken = default
     )
     {
@@ -35,23 +36,23 @@ public sealed class InventoryService : IInventoryService
                 cancellationToken: cancellationToken
             )
             .ConfigureAwait(false);
-        return ApiResponse<IEnumerable<InventoryDto>>.Success(inventories.ToDto());
+        return Result<IEnumerable<InventoryDto>>.Success(inventories.ToDto());
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<InventoryDto>> GetInventoryByIdAsync(
+    public async Task<Result<InventoryDto>> GetInventoryByIdAsync(
         int id,
         CancellationToken cancellationToken = default
     )
     {
         var inventory = await LoadWithCreatorAsync(id, cancellationToken).ConfigureAwait(false);
         return inventory is null
-            ? ApiResponse<InventoryDto>.Failure("Inventory not found")
-            : ApiResponse<InventoryDto>.Success(inventory.ToDto());
+            ? Result<InventoryDto>.NotFound("Inventory not found")
+            : Result<InventoryDto>.Success(inventory.ToDto());
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<InventoryDto>> GetInventoryByBarcodeAsync(
+    public async Task<Result<InventoryDto>> GetInventoryByBarcodeAsync(
         string barcode,
         CancellationToken cancellationToken = default
     )
@@ -60,12 +61,12 @@ public sealed class InventoryService : IInventoryService
             .Inventories.GetByBarcodeAsync(barcode, cancellationToken)
             .ConfigureAwait(false);
         return inventory is null
-            ? ApiResponse<InventoryDto>.Failure("Inventory not found")
-            : ApiResponse<InventoryDto>.Success(inventory.ToDto());
+            ? Result<InventoryDto>.NotFound("Inventory not found")
+            : Result<InventoryDto>.Success(inventory.ToDto());
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<InventoryDto>> CreateInventoryAsync(
+    public async Task<Result<InventoryDto>> CreateInventoryAsync(
         CreateInventoryDto createInventoryDto,
         int createdByUserId,
         CancellationToken cancellationToken = default
@@ -78,7 +79,7 @@ public sealed class InventoryService : IInventoryService
                 .ConfigureAwait(false)
         )
         {
-            return ApiResponse<InventoryDto>.Failure("Barcode already exists");
+            return Result<InventoryDto>.Conflict("Barcode already exists");
         }
 
         if (
@@ -91,7 +92,7 @@ public sealed class InventoryService : IInventoryService
                 .ConfigureAwait(false)
         )
         {
-            return ApiResponse<InventoryDto>.Failure("Serial number already exists");
+            return Result<InventoryDto>.Conflict("Serial number already exists");
         }
 
         var inventory = createInventoryDto.ToEntity();
@@ -104,14 +105,14 @@ public sealed class InventoryService : IInventoryService
         _logger.LogInformation("Created inventory {InventoryId}.", inventory.Id);
         var created = await LoadWithCreatorAsync(inventory.Id, cancellationToken)
             .ConfigureAwait(false);
-        return ApiResponse<InventoryDto>.Success(
+        return Result<InventoryDto>.Success(
             created!.ToDto(),
             "Inventory created successfully"
         );
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<InventoryDto>> UpdateInventoryAsync(
+    public async Task<Result<InventoryDto>> UpdateInventoryAsync(
         int id,
         UpdateInventoryDto updateInventoryDto,
         CancellationToken cancellationToken = default
@@ -122,7 +123,7 @@ public sealed class InventoryService : IInventoryService
             .ConfigureAwait(false);
         if (inventory is null)
         {
-            return ApiResponse<InventoryDto>.Failure("Inventory not found");
+            return Result<InventoryDto>.NotFound("Inventory not found");
         }
 
         if (
@@ -133,7 +134,7 @@ public sealed class InventoryService : IInventoryService
                 .ConfigureAwait(false)
         )
         {
-            return ApiResponse<InventoryDto>.Failure("Barcode already exists");
+            return Result<InventoryDto>.Conflict("Barcode already exists");
         }
 
         if (
@@ -147,7 +148,7 @@ public sealed class InventoryService : IInventoryService
                 .ConfigureAwait(false)
         )
         {
-            return ApiResponse<InventoryDto>.Failure("Serial number already exists");
+            return Result<InventoryDto>.Conflict("Serial number already exists");
         }
 
         // Keep AvailableQuantity consistent with the total-quantity delta.
@@ -155,9 +156,7 @@ public sealed class InventoryService : IInventoryService
         var newAvailableQuantity = inventory.AvailableQuantity + quantityDifference;
         if (newAvailableQuantity < 0)
         {
-            return ApiResponse<InventoryDto>.Failure(
-                "Cannot reduce quantity below assigned amount"
-            );
+            return Result<InventoryDto>.Validation("Cannot reduce quantity below assigned amount");
         }
 
         updateInventoryDto.UpdateEntity(inventory);
@@ -167,14 +166,14 @@ public sealed class InventoryService : IInventoryService
 
         _logger.LogInformation("Updated inventory {InventoryId}.", id);
         var updated = await LoadWithCreatorAsync(id, cancellationToken).ConfigureAwait(false);
-        return ApiResponse<InventoryDto>.Success(
+        return Result<InventoryDto>.Success(
             updated!.ToDto(),
             "Inventory updated successfully"
         );
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<bool>> DeleteInventoryAsync(
+    public async Task<Result<bool>> DeleteInventoryAsync(
         int id,
         CancellationToken cancellationToken = default
     )
@@ -184,7 +183,7 @@ public sealed class InventoryService : IInventoryService
             .ConfigureAwait(false);
         if (inventory is null)
         {
-            return ApiResponse<bool>.Failure("Inventory not found");
+            return Result<bool>.NotFound("Inventory not found");
         }
 
         var hasActiveAssignments = await _unitOfWork
@@ -195,7 +194,7 @@ public sealed class InventoryService : IInventoryService
             .ConfigureAwait(false);
         if (hasActiveAssignments)
         {
-            return ApiResponse<bool>.Failure("Cannot delete inventory with active assignments");
+            return Result<bool>.Conflict("Cannot delete inventory with active assignments");
         }
 
         inventory.IsDeleted = true;
@@ -203,22 +202,22 @@ public sealed class InventoryService : IInventoryService
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Soft-deleted inventory {InventoryId}.", id);
-        return ApiResponse<bool>.Success(true, "Inventory deleted successfully");
+        return Result<bool>.Success(true, "Inventory deleted successfully");
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<IEnumerable<InventoryDto>>> GetAvailableInventoriesAsync(
+    public async Task<Result<IEnumerable<InventoryDto>>> GetAvailableInventoriesAsync(
         CancellationToken cancellationToken = default
     )
     {
         var inventories = await _unitOfWork
             .Inventories.GetAvailableInventoriesAsync(cancellationToken)
             .ConfigureAwait(false);
-        return ApiResponse<IEnumerable<InventoryDto>>.Success(inventories.ToDto());
+        return Result<IEnumerable<InventoryDto>>.Success(inventories.ToDto());
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<IEnumerable<InventoryDto>>> GetExpiringInventoriesAsync(
+    public async Task<Result<IEnumerable<InventoryDto>>> GetExpiringInventoriesAsync(
         int monthsBefore = 3,
         CancellationToken cancellationToken = default
     )
@@ -227,11 +226,11 @@ public sealed class InventoryService : IInventoryService
         var inventories = await _unitOfWork
             .Inventories.GetExpiringInventoriesAsync(expiryDate, cancellationToken)
             .ConfigureAwait(false);
-        return ApiResponse<IEnumerable<InventoryDto>>.Success(inventories.ToDto());
+        return Result<IEnumerable<InventoryDto>>.Success(inventories.ToDto());
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<IEnumerable<InventoryDto>>> GetLowStockInventoriesAsync(
+    public async Task<Result<IEnumerable<InventoryDto>>> GetLowStockInventoriesAsync(
         int threshold = 5,
         CancellationToken cancellationToken = default
     )
@@ -239,11 +238,11 @@ public sealed class InventoryService : IInventoryService
         var inventories = await _unitOfWork
             .Inventories.GetLowStockInventoriesAsync(threshold, cancellationToken)
             .ConfigureAwait(false);
-        return ApiResponse<IEnumerable<InventoryDto>>.Success(inventories.ToDto());
+        return Result<IEnumerable<InventoryDto>>.Success(inventories.ToDto());
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<IEnumerable<InventoryDto>>> SearchInventoriesAsync(
+    public async Task<Result<IEnumerable<InventoryDto>>> SearchInventoriesAsync(
         InventorySearchDto searchDto,
         CancellationToken cancellationToken = default
     )
@@ -279,11 +278,11 @@ public sealed class InventoryService : IInventoryService
             )
             .ConfigureAwait(false);
 
-        return ApiResponse<IEnumerable<InventoryDto>>.Success(inventories.ToDto());
+        return Result<IEnumerable<InventoryDto>>.Success(inventories.ToDto());
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<PagedResult<InventoryDto>>> GetInventoriesPagedAsync(
+    public async Task<Result<PagedResult<InventoryDto>>> GetInventoriesPagedAsync(
         int pageNumber,
         int pageSize,
         CancellationToken cancellationToken = default
@@ -309,11 +308,11 @@ public sealed class InventoryService : IInventoryService
             PageSize = pageSize,
         };
 
-        return ApiResponse<PagedResult<InventoryDto>>.Success(result);
+        return Result<PagedResult<InventoryDto>>.Success(result);
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<IEnumerable<InventoryDto>>> GetInventoriesByCategoryAsync(
+    public async Task<Result<IEnumerable<InventoryDto>>> GetInventoriesByCategoryAsync(
         string category,
         CancellationToken cancellationToken = default
     )
@@ -321,7 +320,7 @@ public sealed class InventoryService : IInventoryService
         var inventories = await _unitOfWork
             .Inventories.GetInventoriesByCategoryAsync(category, cancellationToken)
             .ConfigureAwait(false);
-        return ApiResponse<IEnumerable<InventoryDto>>.Success(inventories.ToDto());
+        return Result<IEnumerable<InventoryDto>>.Success(inventories.ToDto());
     }
 
     /// <summary>Loads a single inventory item (tracking-free) with its creator navigation for projection.</summary>

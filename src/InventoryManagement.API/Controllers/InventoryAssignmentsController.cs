@@ -1,3 +1,4 @@
+using InventoryManagement.API.Infrastructure;
 using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.DTOs;
 using InventoryManagement.Domain.Interfaces;
@@ -12,7 +13,7 @@ namespace InventoryManagement.API.Controllers;
 [Route("api/[controller]")]
 [Produces("application/json")]
 [Authorize(Policy = AuthConstants.Policies.AllRoles)]
-public class InventoryAssignmentsController : ControllerBase
+public class InventoryAssignmentsController : ApiControllerBase
 {
     private readonly IInventoryAssignmentService _assignmentService;
     private readonly ILogger<InventoryAssignmentsController> _logger;
@@ -33,7 +34,7 @@ public class InventoryAssignmentsController : ControllerBase
     public async Task<
         ActionResult<ApiResponse<IEnumerable<InventoryAssignmentDto>>>
     > GetAllAssignments(CancellationToken cancellationToken) =>
-        Ok(await _assignmentService.GetAllAssignmentsAsync(cancellationToken));
+        HandleResult(await _assignmentService.GetAllAssignmentsAsync(cancellationToken));
 
     /// <summary>Lists assignments with pagination (Admin or Provider).</summary>
     [HttpGet("paged")]
@@ -45,12 +46,8 @@ public class InventoryAssignmentsController : ControllerBase
         [FromQuery] int pageSize = 10,
         CancellationToken cancellationToken = default
     ) =>
-        Ok(
-            await _assignmentService.GetAssignmentsPagedAsync(
-                pageNumber,
-                pageSize,
-                cancellationToken
-            )
+        HandleResult(
+            await _assignmentService.GetAssignmentsPagedAsync(pageNumber, pageSize, cancellationToken)
         );
 
     /// <summary>Gets an assignment by identifier (Admin/Provider, or the recipient).</summary>
@@ -68,17 +65,17 @@ public class InventoryAssignmentsController : ControllerBase
         }
 
         var result = await _assignmentService.GetAssignmentByIdAsync(id, cancellationToken);
-        if (!result.IsSuccess)
+        if (result.IsFailure)
         {
-            return NotFound(result);
+            return HandleResult(result);
         }
 
-        if (!IsAdminOrProvider() && result.Data!.UserId != currentUserId)
+        if (!IsAdminOrProvider() && result.Value!.UserId != currentUserId)
         {
             return Forbid();
         }
 
-        return Ok(result);
+        return HandleResult(result);
     }
 
     /// <summary>Lists a user's assignments (Admin/Provider, or the user themselves).</summary>
@@ -99,7 +96,9 @@ public class InventoryAssignmentsController : ControllerBase
             return Forbid();
         }
 
-        return Ok(await _assignmentService.GetAssignmentsByUserIdAsync(userId, cancellationToken));
+        return HandleResult(
+            await _assignmentService.GetAssignmentsByUserIdAsync(userId, cancellationToken)
+        );
     }
 
     /// <summary>Lists the caller's own assignments.</summary>
@@ -115,7 +114,7 @@ public class InventoryAssignmentsController : ControllerBase
             );
         }
 
-        return Ok(
+        return HandleResult(
             await _assignmentService.GetAssignmentsByUserIdAsync(currentUserId, cancellationToken)
         );
     }
@@ -126,7 +125,7 @@ public class InventoryAssignmentsController : ControllerBase
     public async Task<
         ActionResult<ApiResponse<IEnumerable<InventoryAssignmentDto>>>
     > GetActiveAssignments(CancellationToken cancellationToken) =>
-        Ok(await _assignmentService.GetActiveAssignmentsAsync(cancellationToken));
+        HandleResult(await _assignmentService.GetActiveAssignmentsAsync(cancellationToken));
 
     /// <summary>Lists a user's active assignments (Admin/Provider, or the user themselves).</summary>
     [HttpGet("active/user/{userId:int}")]
@@ -146,7 +145,7 @@ public class InventoryAssignmentsController : ControllerBase
             return Forbid();
         }
 
-        return Ok(
+        return HandleResult(
             await _assignmentService.GetActiveAssignmentsByUserIdAsync(userId, cancellationToken)
         );
     }
@@ -157,7 +156,7 @@ public class InventoryAssignmentsController : ControllerBase
     public async Task<
         ActionResult<ApiResponse<IEnumerable<InventoryAssignmentDto>>>
     > GetOverdueAssignments(CancellationToken cancellationToken) =>
-        Ok(await _assignmentService.GetOverdueAssignmentsAsync(cancellationToken));
+        HandleResult(await _assignmentService.GetOverdueAssignmentsAsync(cancellationToken));
 
     /// <summary>Gets the assignment history for an inventory item (Admin or Provider).</summary>
     [HttpGet("history/inventory/{inventoryId:int}")]
@@ -165,14 +164,7 @@ public class InventoryAssignmentsController : ControllerBase
     public async Task<ActionResult<ApiResponse<AssignmentHistoryDto>>> GetAssignmentHistory(
         int inventoryId,
         CancellationToken cancellationToken
-    )
-    {
-        var result = await _assignmentService.GetAssignmentHistoryAsync(
-            inventoryId,
-            cancellationToken
-        );
-        return result.IsSuccess ? Ok(result) : NotFound(result);
-    }
+    ) => HandleResult(await _assignmentService.GetAssignmentHistoryAsync(inventoryId, cancellationToken));
 
     /// <summary>Creates a new assignment (Admin or Provider).</summary>
     [HttpPost]
@@ -192,12 +184,15 @@ public class InventoryAssignmentsController : ControllerBase
             assignedByUserId,
             cancellationToken
         );
-        if (!result.IsSuccess)
-        {
-            return BadRequest(result);
-        }
-
-        return CreatedAtAction(nameof(GetAssignmentById), new { id = result.Data!.Id }, result);
+        return HandleResult(
+            result,
+            (value, message) =>
+                CreatedAtAction(
+                    nameof(GetAssignmentById),
+                    new { id = value.Id },
+                    ApiResponse<InventoryAssignmentDto>.Success(value, message)
+                )
+        );
     }
 
     /// <summary>Updates an active assignment (Admin or Provider).</summary>
@@ -207,15 +202,14 @@ public class InventoryAssignmentsController : ControllerBase
         int id,
         [FromBody] UpdateInventoryAssignmentDto updateAssignmentDto,
         CancellationToken cancellationToken
-    )
-    {
-        var result = await _assignmentService.UpdateAssignmentAsync(
-            id,
-            updateAssignmentDto,
-            cancellationToken
+    ) =>
+        HandleResult(
+            await _assignmentService.UpdateAssignmentAsync(
+                id,
+                updateAssignmentDto,
+                cancellationToken
+            )
         );
-        return result.IsSuccess ? Ok(result) : BadRequest(result);
-    }
 
     /// <summary>Processes a return (Admin or Provider).</summary>
     [HttpPost("return")]
@@ -230,12 +224,13 @@ public class InventoryAssignmentsController : ControllerBase
             return BadRequest(ApiResponse<bool>.Failure("Invalid user ID"));
         }
 
-        var result = await _assignmentService.ReturnAssignmentAsync(
-            returnAssignmentDto,
-            returnedToUserId,
-            cancellationToken
+        return HandleResult(
+            await _assignmentService.ReturnAssignmentAsync(
+                returnAssignmentDto,
+                returnedToUserId,
+                cancellationToken
+            )
         );
-        return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
 
     private bool TryGetCallerId(out int userId) =>
