@@ -6,6 +6,11 @@
 # dotenv files
 .env
 
+# SQLite development database (generated at runtime from EF Core migrations)
+*.db
+*.db-shm
+*.db-wal
+
 # User-specific files
 *.rsuser
 *.suo
