@@ -8,6 +8,7 @@
     <File Path="docs\PR#3 Refactor-Changes.md" />
     <File Path="docs\PR#3 Current-Issues.md" />
     <File Path="docs\API-Testing-Guide.md" />
+    <File Path="docs\UI-Testing-Guide.md" />
     <File Path="docs\Database-Schema.md" />
     <File Path="docs\Data-Flow-Architecture.md" />
     <File Path="docs\Domain-Model.md" />
