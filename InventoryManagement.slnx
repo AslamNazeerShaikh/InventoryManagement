@@ -1,60 +1,29 @@
-﻿<Solution>
+<Solution>
   <Configurations>
     <Platform Name="Any CPU" />
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
   <Folder Name="/docs/">
+    <File Path="docs\PR#3 Refactor-Changes.md" />
+    <File Path="docs\PR#3 Current-Issues.md" />
     <File Path="docs\API-Testing-Guide.md" />
+    <File Path="docs\UI-Testing-Guide.md" />
     <File Path="docs\Database-Schema.md" />
     <File Path="docs\Data-Flow-Architecture.md" />
     <File Path="docs\Domain-Model.md" />
     <File Path="docs\README.md" />
   </Folder>
-  <Folder Name="/src/">
-    <Project Path="src\InventoryManagement.API\InventoryManagement.API.csproj" Type="Classic C#">
-      <Configuration Solution="Debug|x64" Project="Debug|Any CPU" />
-      <Configuration Solution="Debug|x86" Project="Debug|Any CPU" />
-      <Configuration Solution="Release|x64" Project="Release|Any CPU" />
-      <Configuration Solution="Release|x86" Project="Release|Any CPU" />
-    </Project>
-    <Project
-      Path="src\InventoryManagement.Application\InventoryManagement.Application.csproj"
-      Type="Classic C#"
-    >
-      <Configuration Solution="Debug|x64" Project="Debug|Any CPU" />
-      <Configuration Solution="Debug|x86" Project="Debug|Any CPU" />
-      <Configuration Solution="Release|x64" Project="Release|Any CPU" />
-      <Configuration Solution="Release|x86" Project="Release|Any CPU" />
-    </Project>
-    <Project
-      Path="src\InventoryManagement.Domain\InventoryManagement.Domain.csproj"
-      Type="Classic C#"
-    >
-      <Configuration Solution="Debug|x64" Project="Debug|Any CPU" />
-      <Configuration Solution="Debug|x86" Project="Debug|Any CPU" />
-      <Configuration Solution="Release|x64" Project="Release|Any CPU" />
-      <Configuration Solution="Release|x86" Project="Release|Any CPU" />
-    </Project>
-    <Project
-      Path="src\InventoryManagement.Infrastructure\InventoryManagement.Infrastructure.csproj"
-      Type="Classic C#"
-    >
-      <Configuration Solution="Debug|x64" Project="Debug|Any CPU" />
-      <Configuration Solution="Debug|x86" Project="Debug|Any CPU" />
-      <Configuration Solution="Release|x64" Project="Release|Any CPU" />
-      <Configuration Solution="Release|x86" Project="Release|Any CPU" />
-    </Project>
+  <Folder Name="/server/">
+    <Project Path="server\InventoryManagement.API\InventoryManagement.API.csproj" />
+    <Project Path="server\InventoryManagement.Application\InventoryManagement.Application.csproj" />
+    <Project Path="server\InventoryManagement.Domain\InventoryManagement.Domain.csproj" />
+    <Project Path="server\InventoryManagement.Infrastructure\InventoryManagement.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project
-      Path="tests\InventoryManagement.Application.Tests\InventoryManagement.Application.Tests.csproj"
-      Type="Classic C#"
-    >
-      <Configuration Solution="Debug|x64" Project="Debug|Any CPU" />
-      <Configuration Solution="Debug|x86" Project="Debug|Any CPU" />
-      <Configuration Solution="Release|x64" Project="Release|Any CPU" />
-      <Configuration Solution="Release|x86" Project="Release|Any CPU" />
-    </Project>
+    <Project Path="tests\InventoryManagement.API.Tests\InventoryManagement.API.Tests.csproj" />
+    <Project Path="tests\InventoryManagement.Domain.Tests\InventoryManagement.Domain.Tests.csproj" />
+    <Project Path="tests\InventoryManagement.Infrastructure.Tests\InventoryManagement.Infrastructure.Tests.csproj" />
+    <Project Path="tests\InventoryManagement.Application.Tests\InventoryManagement.Application.Tests.csproj" />
   </Folder>
 </Solution>

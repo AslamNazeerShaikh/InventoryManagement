@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.11" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.11">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <!-- Microsoft-provided password hashing (PBKDF2), replacing the third-party BCrypt.Net dependency. -->
+    <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="10.0.0" />
+    <!-- Microsoft-provided JWT creation (IdentityModel family). -->
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.22.0" />
+    <!-- Hosting/options/logging/config abstractions for background cleanup and DI wiring. -->
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.11" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\InventoryManagement.Domain\InventoryManagement.Domain.csproj" />
+  </ItemGroup>
+</Project>
