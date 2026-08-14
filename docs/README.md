@@ -2,9 +2,11 @@
 
 ## 📋 Overview
 
-Welcome to the comprehensive documentation for the **Inventory Management System** - a robust solution for managing medical equipment inventory with expiry tracking, assignment management, and real-time visibility designed for healthcare environments with Nurse Practitioners.
+**Domain‑agnostic & reusable.** A versatile, framework‑agnostic **Inventory Management REST API** built with **ASP.NET Core** (Clean Architecture, JWT + role‑based auth, EF Core, Result pattern). The backend can be used in **any domain or industry that manages inventory** — retail, warehousing, manufacturing, logistics, IT/asset tracking, healthcare, and beyond — and with **any frontend or client** (web, mobile, or desktop). It has no knowledge of UI or client logic, so the same API powers whatever application you build on top of it.
 
-The latest implementation includes a security/architecture hardening refactor and a Result design pattern for application outcomes: unified JWT configuration, Microsoft PBKDF2 password hashing, hashed refresh tokens, authenticated idempotency, optimistic concurrency, centralized exception handling, automatic validation, configurable CORS/rate limiting, structured Serilog logging, and `/health` checks. HTTP response bodies still use the `ApiResponse<T>` envelope (`isSuccess`, `message`, `data`, `errors`) so client JSON shape remains stable.
+This repository **demonstrates** the backend with a medical‑equipment management app (expiry tracking, assignment/return workflows, and real‑time visibility) built in **Next.js, React, TypeScript & Tailwind**. That medical scenario is only an example — swap the client and relabel the data model and the same API serves any inventory use case.
+
+The implementation includes a security/architecture hardening refactor and a Result design pattern for application outcomes: unified JWT configuration, Microsoft PBKDF2 password hashing, hashed refresh tokens, authenticated idempotency, optimistic concurrency, centralized exception handling, automatic validation, configurable CORS/rate limiting, structured Serilog logging, and `/health` checks. HTTP response bodies use the `ApiResponse<T>` envelope (`isSuccess`, `message`, `data`, `errors`) so the client JSON shape stays stable.
 
 ## 🗂️ Documentation Structure
 
