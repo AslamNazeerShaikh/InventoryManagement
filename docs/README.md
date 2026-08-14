@@ -21,7 +21,20 @@ The latest implementation includes a security/architecture hardening refactor an
 
 ---
 
-### 2. [Database Schema](Database-Schema.md) 🗄️
+### 2. [UI Testing Guide](UI-Testing-Guide.md) 🖥️
+
+**End-to-end front-end testing for the MediStock web client**
+
+- **Running the app**: start the API + Next.js client with the same-origin proxy
+- **Role-based journeys**: Admin, Provider (Nurse Practitioner) and Staff permutations
+- **Feature-by-feature steps**: Dashboard, Inventory, Assignments, Users, and Profile
+- **Permission & action matrix**: what each role can do on every page, plus validation/error cases
+
+**🎯 Use this when**: You need to test or understand the web UI and its permissions.
+
+---
+
+### 3. [Database Schema](Database-Schema.md) 🗄️
 
 **Comprehensive database design and relationship documentation**
 
@@ -34,7 +47,7 @@ The latest implementation includes a security/architecture hardening refactor an
 
 ---
 
-### 3. [Domain Model](Domain-Model.md) 🏗️
+### 4. [Domain Model](Domain-Model.md) 🏗️
 
 **Domain-driven design documentation covering entities, DTOs, options, security abstractions, and business logic**
 
@@ -48,7 +61,7 @@ The latest implementation includes a security/architecture hardening refactor an
 
 ---
 
-### 4. [Data Flow & Architecture](Data-Flow-Architecture.md) 🔄
+### 5. [Data Flow & Architecture](Data-Flow-Architecture.md) 🔄
 
 **System architecture and data flow patterns throughout the application layers**
 
@@ -277,6 +290,7 @@ The Application layer no longer depends on Infrastructure; options and security 
 ## 📋 Documentation Checklist
 
 - ✅ **API Testing Guide**: Complete endpoint testing with security/error scenarios
+- ✅ **UI Testing Guide**: Front-end feature walkthroughs, role permutations, and permission matrix
 - ✅ **Database Schema**: Full table structures with concurrency and idempotency details
 - ✅ **Domain Model**: Business entities, DTOs, options, and interfaces
 - ✅ **Data Flow & Architecture**: System patterns and implementation guidance
