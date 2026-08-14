@@ -21,8 +21,8 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\InventoryManagement.Application\InventoryManagement.Application.csproj" />
-    <ProjectReference Include="..\..\src\InventoryManagement.Infrastructure\InventoryManagement.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\server\InventoryManagement.Application\InventoryManagement.Application.csproj" />
+    <ProjectReference Include="..\..\server\InventoryManagement.Infrastructure\InventoryManagement.Infrastructure.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

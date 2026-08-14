@@ -23,6 +23,6 @@
     <Using Include="Xunit" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\InventoryManagement.Infrastructure\InventoryManagement.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\server\InventoryManagement.Infrastructure\InventoryManagement.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

@@ -7,7 +7,7 @@ This document provides a comprehensive overview of the database schema, includin
 ## Database Technology
 
 - **Database Engine**: SQLite
-- **Development File Location**: `src\InventoryManagement.Infrastructure\inventory.db`
+- **Development File Location**: `server\InventoryManagement.Infrastructure\inventory.db`
 - **ORM**: Entity Framework Core
 - **Migration Support**: Yes (Code-First approach)
 - **Concurrency Strategy**: Provider-agnostic GUID `ConcurrencyToken` configured as an EF concurrency token
@@ -351,20 +351,20 @@ Mutating request + Idempotency-Key → Authenticate first → Hash request body
 
 ```powershell
 # Add new migration
-dotnet ef migrations add MigrationName --project src\InventoryManagement.Infrastructure --startup-project src\InventoryManagement.API
+dotnet ef migrations add MigrationName --project server\InventoryManagement.Infrastructure --startup-project server\InventoryManagement.API
 
 # Update database
-dotnet ef database update --project src\InventoryManagement.Infrastructure --startup-project src\InventoryManagement.API
+dotnet ef database update --project server\InventoryManagement.Infrastructure --startup-project server\InventoryManagement.API
 
 # Generate SQL script
-dotnet ef migrations script --project src\InventoryManagement.Infrastructure --startup-project src\InventoryManagement.API
+dotnet ef migrations script --project server\InventoryManagement.Infrastructure --startup-project server\InventoryManagement.API
 ```
 
 ### 3. Database Backup/Restore
 
 ```powershell
-Copy-Item src\InventoryManagement.Infrastructure\inventory.db backup\inventory_backup_20260813.db
-Copy-Item backup\inventory_backup_20260813.db src\InventoryManagement.Infrastructure\inventory.db
+Copy-Item server\InventoryManagement.Infrastructure\inventory.db backup\inventory_backup_20260813.db
+Copy-Item backup\inventory_backup_20260813.db server\InventoryManagement.Infrastructure\inventory.db
 ```
 
 ---

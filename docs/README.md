@@ -77,7 +77,7 @@ The latest implementation includes a security/architecture hardening refactor an
 ```powershell
 cd "c:\Users\aslams\source\repos\localDev\InventoryManagement"
 dotnet restore
-cd src\InventoryManagement.API
+cd server\InventoryManagement.API
 dotnet build
 dotnet run --launch-profile https
 ```
@@ -85,7 +85,7 @@ dotnet run --launch-profile https
 Alternative:
 
 ```powershell
-cd "c:\Users\aslams\source\repos\localDev\InventoryManagement\src\InventoryManagement.API"
+cd "c:\Users\aslams\source\repos\localDev\InventoryManagement\server\InventoryManagement.API"
 dotnet run --urls="https://localhost:7178;http://localhost:5067"
 ```
 
@@ -143,7 +143,7 @@ Examples: missing entities return 404, duplicate barcode/email conflicts return 
 #### Database Issues
 
 - Database auto-migrates and seeds on first run.
-- Development location: `src\InventoryManagement.Infrastructure\inventory.db`.
+- Development location: `server\InventoryManagement.Infrastructure\inventory.db`.
 - To reset: stop the app, delete the database file, restart the app.
 
 ---
@@ -263,12 +263,12 @@ The Application layer no longer depends on Infrastructure; options and security 
 ### Database Reset (Development)
 
 1. Stop the application.
-2. Delete `src\InventoryManagement.Infrastructure\inventory.db`.
+2. Delete `server\InventoryManagement.Infrastructure\inventory.db`.
 3. Restart the application.
 
 ### Logging Location
 
-- **Log Files**: `src\InventoryManagement.API\logs\InventoryManagement-.txt`
+- **Log Files**: `server\InventoryManagement.API\logs\InventoryManagement-.txt`
 - **Rotation**: Hourly with 168 retained files by default
 - **Format**: Structured Serilog output with source context
 

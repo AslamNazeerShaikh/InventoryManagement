@@ -25,6 +25,6 @@
     <Using Include="Xunit" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\InventoryManagement.API\InventoryManagement.API.csproj" />
+    <ProjectReference Include="..\..\server\InventoryManagement.API\InventoryManagement.API.csproj" />
   </ItemGroup>
 </Project>

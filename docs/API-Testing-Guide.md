@@ -712,7 +712,7 @@ curl -X GET "https://localhost:7178/health" -k
 ### Reset Database (Development Only)
 
 1. **Stop the application**.
-2. **Delete the database file**: `src\InventoryManagement.Infrastructure\inventory.db`.
+2. **Delete the database file**: `server\InventoryManagement.Infrastructure\inventory.db`.
 3. **Restart the application** - it will migrate the database and seed the admin user.
 
 ### Test Data Sequences

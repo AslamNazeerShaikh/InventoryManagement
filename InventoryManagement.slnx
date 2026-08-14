@@ -13,11 +13,11 @@
     <File Path="docs\Domain-Model.md" />
     <File Path="docs\README.md" />
   </Folder>
-  <Folder Name="/src/">
-    <Project Path="src\InventoryManagement.API\InventoryManagement.API.csproj" />
-    <Project Path="src\InventoryManagement.Application\InventoryManagement.Application.csproj" />
-    <Project Path="src\InventoryManagement.Domain\InventoryManagement.Domain.csproj" />
-    <Project Path="src\InventoryManagement.Infrastructure\InventoryManagement.Infrastructure.csproj" />
+  <Folder Name="/server/">
+    <Project Path="server\InventoryManagement.API\InventoryManagement.API.csproj" />
+    <Project Path="server\InventoryManagement.Application\InventoryManagement.Application.csproj" />
+    <Project Path="server\InventoryManagement.Domain\InventoryManagement.Domain.csproj" />
+    <Project Path="server\InventoryManagement.Infrastructure\InventoryManagement.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests\InventoryManagement.API.Tests\InventoryManagement.API.Tests.csproj" />
