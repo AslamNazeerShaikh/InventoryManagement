@@ -109,6 +109,9 @@ function buildUrl(path: string, query?: Record<string, QueryValue>): string {
   return qs ? `${base}?${qs}` : base;
 }
 
+/** Abort any single API request that exceeds this many milliseconds. */
+const REQUEST_TIMEOUT_MS = 30_000;
+
 let refreshPromise: Promise<boolean> | null = null;
 
 async function tryRefresh(): Promise<boolean> {
@@ -149,17 +152,27 @@ async function request<T>(
   if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
 
   let res: Response;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     res = await fetch(buildUrl(path, query), {
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+      // Never let the browser cache authenticated API responses.
+      cache: "no-store",
     });
-  } catch {
+  } catch (e) {
+    const timedOut = e instanceof DOMException && e.name === "AbortError";
     throw new ApiError(
-      "Cannot reach the API. Is the InventoryManagement.API server running?",
+      timedOut
+        ? "The request timed out. Please try again."
+        : "Cannot reach the API. Is the InventoryManagement.API server running?",
       0,
     );
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   if (res.status === 401 && auth && !_retry && refreshToken) {
