@@ -2,67 +2,76 @@
 
 ## 📋 Overview
 
-Welcome to the comprehensive documentation for the **Inventory Management System** - a robust solution for managing medical equipment inventory with expiry tracking, assignment management, and real-time visibility designed specifically for healthcare environments with Nurse Practitioners.
+Welcome to the comprehensive documentation for the **Inventory Management System** - a robust solution for managing medical equipment inventory with expiry tracking, assignment management, and real-time visibility designed for healthcare environments with Nurse Practitioners.
+
+The latest implementation includes a security/architecture hardening refactor and a Result design pattern for application outcomes: unified JWT configuration, Microsoft PBKDF2 password hashing, hashed refresh tokens, authenticated idempotency, optimistic concurrency, centralized exception handling, automatic validation, configurable CORS/rate limiting, structured Serilog logging, and `/health` checks. HTTP response bodies still use the `ApiResponse<T>` envelope (`isSuccess`, `message`, `data`, `errors`) so client JSON shape remains stable.
 
 ## 🗂️ Documentation Structure
 
-### 1. [API Testing Guide](./API-Testing-Guide.md) 📡
+### 1. [API Testing Guide](API-Testing-Guide.md) 📡
 
 **Complete step-by-step testing documentation for all API endpoints**
 
-- **Pre-seeded Admin Access**: Default credentials and initial setup
-- **Controller-by-Controller Testing**: Detailed flows for Auth, Users, Inventory, Assignments, and Dashboard
-- **Business Logic Testing**: Proper sequences to avoid errors and exceptions
-- **Error Scenario Testing**: Authentication, authorization, validation, and business rule violations
+- **Pre-seeded Admin Access**: Local development credentials and secure production seeding notes
+- **Controller-by-Controller Testing**: Auth, Users, Inventory, Assignments, Dashboard, and Health
+- **Security Testing**: JWT, refresh-token, rate-limit, validation, idempotency, and authorization scenarios
 - **Testing Tools**: PowerShell, cURL, and Postman examples
-- **Data Management**: Reset procedures and test data sequences
 
-**🎯 Use this when**: You need to test the API endpoints systematically without encountering errors.
+**🎯 Use this when**: You need to test the API endpoints systematically.
 
 ---
 
-### 2. [Database Schema](./Database-Schema.md) 🗄️
+### 2. [UI Testing Guide](UI-Testing-Guide.md) 🖥️
+
+**End-to-end front-end testing for the MediStock web client**
+
+- **Running the app**: start the API + Next.js client with the same-origin proxy
+- **Role-based journeys**: Admin, Provider (Nurse Practitioner) and Staff permutations
+- **Feature-by-feature steps**: Dashboard, Inventory, Assignments, Users, and Profile
+- **Permission & action matrix**: what each role can do on every page, plus validation/error cases
+
+**🎯 Use this when**: You need to test or understand the web UI and its permissions.
+
+---
+
+### 3. [Database Schema](Database-Schema.md) 🗄️
 
 **Comprehensive database design and relationship documentation**
 
-- **Table Structures**: Complete schema for Users, Inventories, and InventoryAssignments
-- **Relationships & Foreign Keys**: Entity relationships with proper constraints
-- **Indexes & Performance**: Optimized indexes for common queries
-- **Business Rules**: Database-enforced integrity and validation rules
+- **Table Structures**: Users, Inventories, InventoryAssignments, and IdempotentRequests
+- **Concurrency Columns**: `ConcurrencyToken` fields on domain entities
+- **Indexes & Performance**: Optimized indexes for common queries and idempotency cleanup
 - **Migration Management**: EF Core migration commands and versioning
-- **Performance Considerations**: Query optimization and connection management
 
-**🎯 Use this when**: You need to understand the database structure, relationships, or plan schema modifications.
-
----
-
-### 3. [Domain Model](./Domain-Model.md) 🏗️
-
-**Domain-driven design documentation covering entities, DTOs, and business logic**
-
-- **Core Entities**: User, Inventory, InventoryAssignment with business methods
-- **Enums & Constants**: UserRole, InventoryStatus, AssignmentStatus with business meanings
-- **DTOs & Validation**: Complete request/response models with validation attributes
-- **Repository Interfaces**: Data access contracts and specialized methods
-- **Service Interfaces**: Business logic contracts and operation definitions
-- **Domain Relationships**: Entity navigation properties and aggregate boundaries
-
-**🎯 Use this when**: You need to understand the business domain, extend functionality, or modify business rules.
+**🎯 Use this when**: You need to understand the database structure or relationships.
 
 ---
 
-### 4. [Data Flow & Architecture](./Data-Flow-Architecture.md) 🔄
+### 4. [Domain Model](Domain-Model.md) 🏗️
+
+**Domain-driven design documentation covering entities, DTOs, options, security abstractions, and business logic**
+
+- **Core Entities**: User, Inventory, InventoryAssignment, IdempotentRequest, and BaseEntity
+- **DTOs & Validation**: Request/response models with DataAnnotations and automatic API validation
+- **Result Pattern**: `Result<T>` service outcomes mapped to HTTP status codes by the API layer
+- **Security Abstractions**: `JwtOptions`, `ITokenService`, `IPasswordHasher`, `ISecretClient`
+- **Repository Interfaces**: Read-optimized data access contracts with cancellation support
+
+**🎯 Use this when**: You need to understand or extend the business domain.
+
+---
+
+### 5. [Data Flow & Architecture](Data-Flow-Architecture.md) 🔄
 
 **System architecture and data flow patterns throughout the application layers**
 
 - **Clean Architecture Layers**: Presentation, Application, Domain, and Infrastructure separation
-- **Request/Response Patterns**: Authentication, authorization, and business logic flows
-- **Data Transformation**: Entity ↔ DTO mapping patterns and audit trail implementation
-- **Transaction Management**: Unit of Work pattern and business consistency
-- **Error Handling**: Comprehensive error pipeline and standardized responses
-- **Performance Patterns**: Caching strategies, pagination, and query optimization
+- **Security Pipeline**: JWT key resolution, token validation, rate limiting, CORS, and health checks
+- **Idempotency Flow**: Authenticated locking, request hashing, replay, bounded caching, and cleanup
+- **Result + Response Mapping**: Application services return `Result<T>`; `ApiControllerBase` maps outcomes to HTTP status codes while preserving `ApiResponse<T>` bodies
+- **Error Handling**: Centralized `IExceptionHandler` and uniform `ApiResponse` responses
 
-**🎯 Use this when**: You need to understand how data moves through the system or implement new features.
+**🎯 Use this when**: You need to understand how data moves through the system.
 
 ---
 
@@ -70,7 +79,7 @@ Welcome to the comprehensive documentation for the **Inventory Management System
 
 ### Prerequisites Setup
 
-1. **Install .NET 10 SDK** (if not already installed)
+1. **Install .NET SDK** required by the solution.
 2. **Trust HTTPS certificates** for development:
    ```powershell
    dotnet dev-certs https --trust
@@ -78,106 +87,77 @@ Welcome to the comprehensive documentation for the **Inventory Management System
 
 ### Project Setup & Running
 
-#### Option 1: Quick Start (from solution root)
-
 ```powershell
-# Navigate to project root
-cd "D:\Temp Files\InventoryManagement"
-
-# Restore all packages for the solution
+cd "c:\Users\aslams\source\repos\localDev\InventoryManagement"
 dotnet restore
-
-# Navigate to API project
-cd src\InventoryManagement.API
-
-# Build the project
+cd server\InventoryManagement.API
 dotnet build
-
-# Run the API (HTTPS development profile)
 dotnet run --launch-profile https
 ```
 
-#### Option 2: Step-by-Step Setup
+Alternative:
 
 ```powershell
-# 1. Navigate to API directory
-cd "D:\Temp Files\InventoryManagement\src\InventoryManagement.API"
-
-# 2. Restore NuGet packages
-dotnet restore
-
-# 3. Build the project to check for errors
-dotnet build
-
-# 4. Run on HTTPS (recommended for JWT tokens)
-dotnet run --launch-profile https
-
-# Alternative: Run with specific URLs
+cd "c:\Users\aslams\source\repos\localDev\InventoryManagement\server\InventoryManagement.API"
 dotnet run --urls="https://localhost:7178;http://localhost:5067"
 ```
-
-#### Option 3: Using Visual Studio
-
-1. Open `InventoryManagement.sln` in Visual Studio
-2. Set `InventoryManagement.API` as startup project
-3. Select **HTTPS** launch profile
-4. Press **F5** or click **Start Debugging**
 
 ### After Startup
 
 1. **API Available at**: `https://localhost:7178`
-2. **Swagger/OpenAPI**: `https://localhost:7178/scalar/v1`
-3. **Default Admin Login**:
+2. **OpenAPI JSON**: `https://localhost:7178/openapi/v1.json`
+3. **Scalar API Reference**: `https://localhost:7178/scalar/v1` (Development only)
+4. **Health Check**: `https://localhost:7178/health`
+5. **Local Development Admin Login**:
    - **Email**: `admin@inventorymanagement.com`
-   - **Password**: `Admin@123`
+   - **Password**: `ChangeMe_LocalDev!2026`
 
-### For API Testing
+> Production should set `SeedData:AdminPassword`. If it is empty, the app generates a strong random admin password and logs it once at startup.
 
-1. **Access Scalar API Documentation**: Navigate to `https://localhost:7178/scalar/v1`
-2. **Login as Admin**: Use default credentials above
-3. **Copy JWT Token**: From login response for authenticated endpoints
-4. **Follow Test Sequences**: Detailed steps in [API Testing Guide](./API-Testing-Guide.md)
+### Configuration Highlights
 
-### For Development
+Current configuration sections are:
 
-1. **Review Domain Model**: Understand entities and business rules
-2. **Examine Database Schema**: Learn data structure and relationships
-3. **Study Data Flow**: Understand request processing and layer interactions
-4. **Test APIs**: Validate your changes using the testing guide
+- `ConnectionStrings:DefaultConnection` - SQLite database path.
+- `Serilog` - console and rolling file logging (`logs\InventoryManagement-.txt`).
+- `Jwt` - single source of truth for token generation and validation: `KeySource`, `Key`, `KeySecretName`, `Issuer`, `Audience`, `AccessTokenMinutes`, `RefreshTokenDays`, `ClockSkewSeconds`.
+- `Idempotency` - key length, response cache cap, lock duration, retention, cleanup interval/batch size, and excluded path prefixes.
+- `Cors` - explicit `AllowedOrigins` and `AllowCredentials`; applied in every environment.
+- `RateLimiting:Auth` - fixed-window limits for `/api/auth/login` and `/api/auth/refresh` (default 10 requests per 60 seconds per remote IP).
+- `SeedData` - admin email/password seeding.
+
+JWT signing keys can be supplied locally with inline configuration, user-secrets, environment overrides, or mounted files. For cloud secret stores, use `Jwt:KeySource=CloudSecret`, set `Jwt:KeySecretName`, and register a cloud-backed `ISecretClient`. Keys under 256 bits are rejected at startup. The old `JwtSettings`, `CORS`, and `ApiSettings` sections are no longer used.
+
+### Result Pattern & API Responses
+
+Application services return `Result<T>` for expected business outcomes instead of throwing. Controllers inherit from `ApiControllerBase`, which maps each `ResultErrorType` to an HTTP status code while keeping the response body as `ApiResponse<T>`.
+
+| Result outcome | HTTP status | ApiResponse body |
+| -------------- | ----------- | ---------------- |
+| `Success` | 200 OK, or 201 Created for create endpoints | `isSuccess: true`, `message`, `data`, empty `errors` |
+| `NotFound` | 404 Not Found | `isSuccess: false`, `message`, `errors` |
+| `Conflict` | 409 Conflict | `isSuccess: false`, `message`, `errors` |
+| `Validation` | 400 Bad Request | `isSuccess: false`, `message`, `errors` |
+| `Unauthorized` | 401 Unauthorized | `isSuccess: false`, `message`, `errors` |
+| `Forbidden` | 403 Forbidden | `isSuccess: false`, `message`, `errors` |
+| `Failure` | 400 Bad Request | `isSuccess: false`, `message`, `errors` |
+
+Examples: missing entities return 404, duplicate barcode/email conflicts return 409, and invalid login returns 401 without changing the JSON envelope.
+
 
 ### Troubleshooting Startup
 
-#### SSL Certificate Issues
+#### JWT Key Issues
 
-```powershell
-# Clean and reinstall development certificates
-dotnet dev-certs https --clean
-dotnet dev-certs https --trust
-```
-
-#### Port Conflicts
-
-```powershell
-# Check what's using port 7178
-netstat -ano | findstr :7178
-
-# Run on alternative ports
-dotnet run --urls="https://localhost:7179;http://localhost:5068"
-```
-
-#### Package Restore Issues
-
-```powershell
-# Clear NuGet cache and restore
-dotnet nuget locals all --clear
-dotnet restore --force
-```
+- `Jwt:Key` is required when `Jwt:KeySource` is `Inline`.
+- `Jwt:KeySecretName` is required when the key is resolved from environment, file, or cloud secrets.
+- The resolved key must be at least 32 UTF-8 bytes.
 
 #### Database Issues
 
-- Database auto-creates on first run
-- Location: `src/InventoryManagement.Infrastructure/inventory.db`
-- To reset: Stop app, delete database file, restart app
+- Database auto-migrates and seeds on first run.
+- Development location: `server\InventoryManagement.Infrastructure\inventory.db`.
+- To reset: stop the app, delete the database file, restart the app.
 
 ---
 
@@ -185,11 +165,11 @@ dotnet restore --force
 
 ### System Purpose
 
-This inventory management system addresses the specific needs of healthcare offices that:
+This inventory management system addresses healthcare offices that:
 
 - **Receive medical equipment** for distribution to Nurse Practitioners
-- **Track expiry dates** with 3-6 month advance alerts for redistribution
-- **Manage assignments** to individual practitioners with return tracking
+- **Track expiry dates** with configurable advance alerts
+- **Manage assignments** with return tracking
 - **Maintain real-time visibility** of inventory status and availability
 - **Support barcode scanning** for efficient inventory operations
 
@@ -197,33 +177,32 @@ This inventory management system addresses the specific needs of healthcare offi
 
 #### 🔐 Security & Authentication
 
-- **JWT-based authentication** with refresh tokens
-- **Role-based authorization** (Admin, NursePractitioner, Staff)
-- **Policy-based access control** for granular permissions
-- **Comprehensive audit trails** for all operations
+- **JWT authentication** with a single strongly-typed `JwtOptions` configuration source
+- **Microsoft password hashing** using PBKDF2-HMAC-SHA256 via `PasswordHasher`
+- **Refresh-token hashing**: only SHA-256 hashes are stored server-side
+- **Role/policy-based authorization** (Admin, NursePractitioner, Staff)
+- **Auth endpoint rate limiting** returning HTTP 429
+- **CORS in all environments** with explicit allowed origins
 
 #### 📦 Inventory Management
 
-- **Complete CRUD operations** with validation
-- **Barcode scanning support** for quick identification
-- **Expiry date tracking** with configurable alerts (3-6 months)
-- **Low stock monitoring** with customizable thresholds
-- **Category and manufacturer organization**
+- **Complete CRUD operations** with automatic validation
+- **Barcode and serial-number support**
+- **Expiry and low stock monitoring**
+- **Optimistic concurrency** to prevent lost stock updates and overselling
 
 #### 👥 Assignment Workflow
 
-- **Equipment assignment** to Nurse Practitioners
-- **Return processing** with condition tracking
-- **Overdue assignment monitoring** with alerts
-- **Complete assignment history** for audit purposes
-- **Quantity tracking** with partial return support
+- **Equipment assignment and return processing**
+- **Transactional create/return operations** via `IUnitOfWork.ExecuteInTransactionAsync`
+- **Overdue assignment monitoring**
+- **Quantity tracking** using total and available inventory quantities
 
 #### 📊 Dashboard & Reporting
 
 - **Real-time statistics** for inventory and assignments
 - **Multiple alert types** (expiry, low stock, overdue)
-- **Recent activity feeds** for operational awareness
-- **Performance-optimized** concurrent data loading
+- **Sequential aggregate loading** to avoid shared DbContext concurrency errors
 
 ---
 
@@ -232,23 +211,25 @@ This inventory management system addresses the specific needs of healthcare offi
 ### Clean Architecture Implementation
 
 ```
-API Layer (Controllers)
+API Layer (Controllers, pipeline, validation, auth)
     ↓
-Application Layer (Services)
+Application Layer (Services and mapping)
     ↓
-Domain Layer (Entities & Business Logic)
+Domain Layer (Entities, DTOs, options, interfaces, exceptions)
     ↓
-Infrastructure Layer (Database & External Services)
+Infrastructure Layer (EF Core, repositories, tokens, hashing, secrets, idempotency)
 ```
+
+The Application layer no longer depends on Infrastructure; options and security abstractions live in Domain, with implementations registered by Infrastructure.
 
 ### Technology Stack
 
-- **Framework**: ASP.NET Core 9.0
-- **Database**: SQLite with Entity Framework Core 9.0
-- **Authentication**: JWT Bearer tokens
-- **Logging**: Serilog with file rotation
-- **API Documentation**: OpenAPI with Scalar
-- **Architecture**: Clean Architecture with DDD principles
+- **Framework**: ASP.NET Core with controllers, automatic model validation, and `ApiControllerBase` Result mapping
+- **Database**: SQLite with Entity Framework Core
+- **Authentication**: JWT bearer tokens with HMAC-SHA256 signing keys resolved by `IJwtSigningKeyProvider`
+- **Password Hashing**: Microsoft `PasswordHasher` (PBKDF2-HMAC-SHA256)
+- **Logging**: Serilog bootstrap + full config, console + rolling file sinks
+- **API Documentation**: OpenAPI with Scalar in Development
 
 ---
 
@@ -256,71 +237,31 @@ Infrastructure Layer (Database & External Services)
 
 ### Authentication (`/api/auth`)
 
-- `POST /login` - User authentication
-- `POST /refresh` - Token refresh
-- `POST /logout` - User logout
-- `POST /change-password` - Password change
+- `POST /login` - User authentication (rate limited)
+- `POST /refresh` - Token refresh (rate limited)
+- `POST /logout` - Revoke refresh token
+- `POST /change-password` - Password change and refresh-token revocation
 - `GET /me` - Current user info
 
 ### Users (`/api/users`)
 
-- `GET /` - All users (Admin only)
-- `POST /` - Create user (Admin only)
-- `GET /{id}` - User details (Admin or own profile)
-- `PUT /{id}` - Update user (Admin or own profile)
-- `DELETE /{id}` - Delete user (Admin only)
+- `GET /`, `GET /paged`, `POST /`, `GET /{id}`, `GET /by-email/{email}`, `PUT /{id}`, `DELETE /{id}`, `GET /nurse-practitioners`, `GET /active`
 
 ### Inventory (`/api/inventory`)
 
-- `GET /` - All inventory items
-- `POST /` - Create inventory (Admin/Provider)
-- `GET /{id}` - Item details
-- `GET /barcode/{barcode}` - Barcode lookup
-- `POST /search` - Advanced search
-- `GET /expiring` - Expiry alerts
-- `GET /low-stock` - Low stock alerts
+- `GET /`, `GET /paged`, `POST /`, `GET /{id}`, `GET /barcode/{barcode}`, `POST /search`, `GET /available`, `GET /expiring`, `GET /low-stock`, `GET /category/{category}`, `PUT /{id}`, `DELETE /{id}`
 
 ### Assignments (`/api/inventoryassignments`)
 
-- `GET /` - All assignments (Admin/Provider)
-- `POST /` - Create assignment (Admin/Provider)
-- `GET /my-assignments` - Current user's assignments
-- `POST /return` - Process return (Admin/Provider)
-- `GET /overdue` - Overdue assignments
-- `GET /history/inventory/{id}` - Assignment history
+- `GET /`, `GET /paged`, `POST /`, `GET /{id}`, `GET /user/{userId}`, `GET /my-assignments`, `GET /active`, `GET /active/user/{userId}`, `PUT /{id}`, `POST /return`, `GET /overdue`, `GET /history/inventory/{id}`
 
 ### Dashboard (`/api/dashboard`)
 
-- `GET /stats` - System statistics
-- `GET /overview` - Complete dashboard data
-- `GET /alerts/summary` - All alerts summary
-- `GET /recent-inventories` - Recent items
-- `GET /recent-assignments` - Recent assignments
+- `GET /stats`, `GET /overview`, `GET /alerts/summary`, `GET /alerts/expiry`, `GET /alerts/low-stock`, `GET /alerts/overdue`, `GET /recent-inventories`, `GET /recent-assignments`
 
----
+### Health
 
-## 🔍 Common Use Cases
-
-### Testing New Features
-
-1. **Read**: [Domain Model](./Domain-Model.md) for business rules
-2. **Plan**: Check [Database Schema](./Database-Schema.md) for data requirements
-3. **Implement**: Follow [Data Flow](./Data-Flow-Architecture.md) patterns
-4. **Test**: Use [API Testing Guide](./API-Testing-Guide.md) sequences
-
-### Troubleshooting Issues
-
-1. **API Errors**: Check [API Testing Guide](./API-Testing-Guide.md) error scenarios
-2. **Database Issues**: Review [Database Schema](./Database-Schema.md) constraints
-3. **Business Logic**: Examine [Domain Model](./Domain-Model.md) validation rules
-4. **Flow Problems**: Study [Data Flow](./Data-Flow-Architecture.md) patterns
-
-### Adding New Endpoints
-
-1. **Domain**: Add entities/DTOs in [Domain Model](./Domain-Model.md)
-2. **Database**: Update schema per [Database Schema](./Database-Schema.md)
-3. **Implementation**: Follow [Data Flow](./Data-Flow-Architecture.md) patterns
-4. **Testing**: Create test cases per [API Testing Guide](./API-Testing-Guide.md)
+- `GET /health` - Application health endpoint
 
 ---
 
@@ -329,55 +270,33 @@ Infrastructure Layer (Database & External Services)
 ### Default Admin Access
 
 - **Email**: `admin@inventorymanagement.com`
-- **Password**: `Admin@123`
+- **Local Development Password**: `ChangeMe_LocalDev!2026`
 - **Capabilities**: Full system access for initial setup
 
 ### Database Reset (Development)
 
-1. Stop the application
-2. Delete `src/InventoryManagement.Infrastructure/inventory.db`
-3. Restart the application (auto-recreates with admin user)
+1. Stop the application.
+2. Delete `server\InventoryManagement.Infrastructure\inventory.db`.
+3. Restart the application.
 
 ### Logging Location
 
-- **Log Files**: `src/InventoryManagement.API/logs/`
-- **Rotation**: Hourly with 7-day retention
-- **Format**: Structured JSON with user context
-
----
-
-## 🎯 Next Steps
-
-### For Developers
-
-1. **Start with**: [Domain Model](./Domain-Model.md) to understand business concepts
-2. **Then explore**: [Database Schema](./Database-Schema.md) for data structure
-3. **Understand flow**: [Data Flow](./Data-Flow-Architecture.md) for implementation patterns
-4. **Test thoroughly**: [API Testing Guide](./API-Testing-Guide.md) for validation
-
-### For Testers
-
-1. **Begin with**: [API Testing Guide](./API-Testing-Guide.md) for step-by-step procedures
-2. **Reference**: [Domain Model](./Domain-Model.md) for business rule validation
-3. **Verify data**: [Database Schema](./Database-Schema.md) for data integrity checks
-
-### For System Administrators
-
-1. **Review**: [Database Schema](./Database-Schema.md) for backup and maintenance
-2. **Monitor**: [Data Flow](./Data-Flow-Architecture.md) for performance optimization
-3. **Maintain**: [API Testing Guide](./API-Testing-Guide.md) for health checks
+- **Log Files**: `server\InventoryManagement.API\logs\InventoryManagement-.txt`
+- **Rotation**: Hourly with 168 retained files by default
+- **Format**: Structured Serilog output with source context
 
 ---
 
 ## 📋 Documentation Checklist
 
-- ✅ **API Testing Guide**: Complete endpoint testing with error scenarios
-- ✅ **Database Schema**: Full table structures with relationships and constraints
-- ✅ **Domain Model**: Comprehensive business entities and DTOs
+- ✅ **API Testing Guide**: Complete endpoint testing with security/error scenarios
+- ✅ **UI Testing Guide**: Front-end feature walkthroughs, role permutations, and permission matrix
+- ✅ **Database Schema**: Full table structures with concurrency and idempotency details
+- ✅ **Domain Model**: Business entities, DTOs, options, and interfaces
 - ✅ **Data Flow & Architecture**: System patterns and implementation guidance
 - ✅ **Overview Documentation**: Navigation and quick start guide
 
-All documentation is current as of the latest system implementation and covers the complete inventory management workflow from user authentication through equipment assignment and return processing.
+All documentation is current as of the security/architecture hardening and Result-pattern refactor.
 
 ---
 
