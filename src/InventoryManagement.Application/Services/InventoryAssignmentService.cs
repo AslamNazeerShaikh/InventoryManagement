@@ -84,12 +84,15 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
                         .ConfigureAwait(false);
                     if (inventory is null)
                     {
-                        return Failed("Inventory not found");
+                        return Failed("Inventory not found", ResultErrorType.NotFound);
                     }
 
                     if (inventory.Status != InventoryStatus.Available)
                     {
-                        return Failed("Inventory is not available for assignment");
+                        return Failed(
+                            "Inventory is not available for assignment",
+                            ResultErrorType.Validation
+                        );
                     }
 
                     if (
@@ -97,14 +100,18 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
                         && inventory.ExpiryDate.Value < DateTime.UtcNow
                     )
                     {
-                        return Failed("Cannot assign expired inventory");
+                        return Failed(
+                            "Cannot assign expired inventory",
+                            ResultErrorType.Validation
+                        );
                     }
 
                     if (inventory.AvailableQuantity < createAssignmentDto.AssignedQuantity)
                     {
                         return Failed(
                             $"Insufficient quantity. Available: {inventory.AvailableQuantity}, "
-                                + $"Requested: {createAssignmentDto.AssignedQuantity}"
+                                + $"Requested: {createAssignmentDto.AssignedQuantity}",
+                            ResultErrorType.Validation
                         );
                     }
 
@@ -113,7 +120,7 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
                         .ConfigureAwait(false);
                     if (user is null)
                     {
-                        return Failed("User not found");
+                        return Failed("User not found", ResultErrorType.NotFound);
                     }
 
                     var assignment = createAssignmentDto.ToEntity();
@@ -138,7 +145,7 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
 
         if (!outcome.Success)
         {
-            return Result<InventoryAssignmentDto>.Failure(outcome.Error!);
+            return ToFailureResult<InventoryAssignmentDto>(outcome);
         }
 
         _logger.LogInformation("Created assignment {AssignmentId}.", outcome.AssignmentId);
@@ -172,12 +179,26 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
 
                     if (assignment is null)
                     {
-                        return Failed("Assignment not found");
+                        return Failed("Assignment not found", ResultErrorType.NotFound);
                     }
 
                     if (assignment.Status != AssignmentStatus.Active)
                     {
-                        return Failed("Can only update active assignments");
+                        return Failed(
+                            "Can only update active assignments",
+                            ResultErrorType.Validation
+                        );
+                    }
+
+                    // Guard the stock invariant: terminal-status transitions (e.g. Returned) must go
+                    // through the dedicated return flow so available quantity is reconciled. Allowing
+                    // them here would flip the status without crediting stock back, corrupting counts.
+                    if (updateAssignmentDto.Status != AssignmentStatus.Active)
+                    {
+                        return Failed(
+                            "Assignment status cannot be changed via update; use the return endpoint to return an assignment.",
+                            ResultErrorType.Validation
+                        );
                     }
 
                     if (updateAssignmentDto.AssignedQuantity != assignment.AssignedQuantity)
@@ -189,7 +210,10 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
                         {
                             if (assignment.Inventory.AvailableQuantity < difference)
                             {
-                                return Failed("Insufficient inventory quantity available");
+                                return Failed(
+                                    "Insufficient inventory quantity available",
+                                    ResultErrorType.Validation
+                                );
                             }
 
                             assignment.Inventory.AvailableQuantity -= difference;
@@ -221,7 +245,7 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
 
         if (!outcome.Success)
         {
-            return Result<InventoryAssignmentDto>.Failure(outcome.Error!);
+            return ToFailureResult<InventoryAssignmentDto>(outcome);
         }
 
         _logger.LogInformation("Updated assignment {AssignmentId}.", id);
@@ -254,12 +278,12 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
 
                     if (assignment is null)
                     {
-                        return Failed("Assignment not found");
+                        return Failed("Assignment not found", ResultErrorType.NotFound);
                     }
 
                     if (assignment.Status != AssignmentStatus.Active)
                     {
-                        return Failed("Assignment is not active");
+                        return Failed("Assignment is not active", ResultErrorType.Validation);
                     }
 
                     assignment.Status = AssignmentStatus.Returned;
@@ -293,7 +317,7 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
 
         if (!outcome.Success)
         {
-            return Result<bool>.Failure(outcome.Error!);
+            return ToFailureResult<bool>(outcome);
         }
 
         _logger.LogInformation(
@@ -421,13 +445,28 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
         );
 
     // Small transactional result helpers keep the delegate bodies readable and allocation-light.
-    private static TransactionOutcome Failed(string error) => new(false, 0, error);
+    private static TransactionOutcome Failed(
+        string error,
+        ResultErrorType errorType = ResultErrorType.Failure
+    ) => new(false, 0, error, errorType);
 
-    private static TransactionOutcome Succeeded(int assignmentId) => new(true, assignmentId, null);
+    private static TransactionOutcome Succeeded(int assignmentId) =>
+        new(true, assignmentId, null, ResultErrorType.None);
+
+    /// <summary>Maps a failed transactional outcome onto the correctly-typed <see cref="Result{T}"/>.</summary>
+    private static Result<T> ToFailureResult<T>(TransactionOutcome outcome) =>
+        outcome.ErrorType switch
+        {
+            ResultErrorType.NotFound => Result<T>.NotFound(outcome.Error!),
+            ResultErrorType.Conflict => Result<T>.Conflict(outcome.Error!),
+            ResultErrorType.Validation => Result<T>.Validation(outcome.Error!),
+            _ => Result<T>.Failure(outcome.Error!),
+        };
 
     private readonly record struct TransactionOutcome(
         bool Success,
         int AssignmentId,
-        string? Error
+        string? Error,
+        ResultErrorType ErrorType
     );
 }

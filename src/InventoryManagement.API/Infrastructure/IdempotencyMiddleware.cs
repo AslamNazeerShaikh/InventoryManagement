@@ -10,8 +10,10 @@ namespace InventoryManagement.API.Infrastructure;
 
 /// <summary>
 /// HTTP idempotency middleware for state-changing requests carrying an <c>Idempotency-Key</c> header.
-/// Delegates persistence/locking to <see cref="IIdempotencyStore"/>, bounds response buffering to a
-/// configured limit (streaming larger responses without caching), hashes the request body to detect
+/// Delegates persistence/locking to <see cref="IIdempotencyStore"/>. To capture the outcome for
+/// replay it buffers the response into memory; only responses whose size is within
+/// <see cref="IdempotencyOptions.MaxCacheableBodyBytes"/> are persisted for replay (larger responses
+/// still complete normally but are marked non-replayable). It hashes the request body to detect
 /// key/payload collisions, releases the lock on server errors to permit safe retries, and skips
 /// configured (e.g. authentication) paths so sensitive responses are never buffered or replayed.
 /// Registered after authentication so anonymous callers cannot populate the store.
