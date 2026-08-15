@@ -22,7 +22,7 @@ const variants: Record<Variant, string> = {
     "text-white border border-white/15 hover:bg-white/[0.06] hover:border-white/25",
   ghost: "text-slate-300 hover:bg-white/[0.06] hover:text-white",
   danger:
-    "text-white bg-gradient-to-br from-rose-500 to-red-600 hover:brightness-110 shadow-[0_10px_30px_-10px_rgba(244,63,94,0.6)]",
+    "text-on-accent bg-gradient-to-br from-rose-500 to-red-600 hover:brightness-110 shadow-[0_10px_30px_-10px_rgba(244,63,94,0.6)]",
   subtle:
     "text-brand-200 bg-brand-500/10 border border-brand-400/20 hover:bg-brand-500/20",
 };
