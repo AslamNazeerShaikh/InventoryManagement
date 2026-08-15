@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
-import { ChevronDown, LogOut, UserCircle } from "lucide-react";
+import { ChevronDown, LogOut, Palette, UserCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -67,6 +67,13 @@ export function UserMenu() {
               className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-slate-300 transition hover:bg-white/[0.06] hover:text-white"
             >
               <UserCircle className="size-4" /> Profile &amp; security
+            </Link>
+            <Link
+              href="/appearance"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-slate-300 transition hover:bg-white/[0.06] hover:text-white"
+            >
+              <Palette className="size-4" /> Appearance
             </Link>
             <button
               onClick={() => {

@@ -55,7 +55,7 @@ export function Modal({
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <motion.div
-            className="absolute inset-0 bg-ink-950/75 backdrop-blur-sm"
+            className="absolute inset-0 bg-backdrop backdrop-blur-sm"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -74,7 +74,7 @@ export function Modal({
             transition={{ type: "spring", damping: 26, stiffness: 280 }}
           >
             {(title || description) && (
-              <div className="flex items-start justify-between gap-4 border-b border-white/[0.07] px-6 py-4">
+              <div className="flex items-start justify-between gap-4 border-b border-line px-6 py-4">
                 <div className="space-y-1">
                   {title && (
                     <h2 className="text-base font-semibold text-white">
@@ -87,7 +87,7 @@ export function Modal({
                 </div>
                 <button
                   onClick={onClose}
-                  className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white/10 hover:text-white"
+                  className="rounded-lg p-1.5 text-slate-400 transition hover:bg-overlay-strong hover:text-foreground"
                   aria-label="Close"
                 >
                   <X className="size-4.5" />
@@ -98,7 +98,7 @@ export function Modal({
               <div className="overflow-y-auto px-6 py-5">{children}</div>
             )}
             {footer && (
-              <div className="flex items-center justify-end gap-3 border-t border-white/[0.07] px-6 py-4">
+              <div className="flex items-center justify-end gap-3 border-t border-line px-6 py-4">
                 {footer}
               </div>
             )}
