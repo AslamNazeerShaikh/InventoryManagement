@@ -1,7 +1,9 @@
 import {
+  BarChart3,
   Boxes,
   ClipboardList,
   LayoutDashboard,
+  Palette,
   UserCircle,
   Users,
   type LucideIcon,
@@ -22,6 +24,8 @@ export const navItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, visible: () => true },
   { label: "Inventory", href: "/inventory", icon: Boxes, visible: () => true },
   { label: "Assignments", href: "/assignments", icon: ClipboardList, visible: () => true },
+  { label: "Reports", href: "/reports", icon: BarChart3, visible: () => true },
   { label: "Users", href: "/users", icon: Users, visible: (p) => p.canManageUsers },
   { label: "Profile", href: "/profile", icon: UserCircle, visible: () => true },
+  { label: "Appearance", href: "/appearance", icon: Palette, visible: () => true },
 ];
