@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -36,12 +37,14 @@ import { FadeIn, Stagger, StaggerItem } from "@/components/ui/reveal";
 export default function DashboardPage() {
   const { user, canManage } = useAuth();
 
+  // Tunable alert parameters (backend clamps the expiry window to 3–6 months).
+  const [expiryMonths, setExpiryMonths] = useState(3);
+  const [lowStockThreshold, setLowStockThreshold] = useState(5);
+
   const { data, loading, error, reload } = useAsync(async () => {
-    const [stats, recentInventories, expiry, lowStock] = await Promise.all([
+    const [stats, recentInventories] = await Promise.all([
       api.dashboard.stats(),
       api.dashboard.recentInventories(6),
-      api.dashboard.expiryAlerts(),
-      api.dashboard.lowStockAlerts(),
     ]);
 
     let recentAssignments: InventoryAssignmentDto[] = [];
@@ -52,8 +55,19 @@ export default function DashboardPage() {
         api.dashboard.overdueAlerts(),
       ]);
     }
-    return { stats, recentInventories, expiry, lowStock, recentAssignments, overdue };
+    return { stats, recentInventories, recentAssignments, overdue };
   }, [canManage]);
+
+  // Expiry window and low-stock threshold are queried independently so tuning a
+  // control re-hits the server for just that list, not the whole dashboard.
+  const expiring = useAsync(
+    () => api.inventory.expiring(expiryMonths),
+    [expiryMonths],
+  );
+  const lowStock = useAsync(
+    () => api.inventory.lowStock(lowStockThreshold),
+    [lowStockThreshold],
+  );
 
   const firstName = user?.name?.split(" ")[0] ?? "there";
 
@@ -156,8 +170,8 @@ export default function DashboardPage() {
                   icon={CalendarClock}
                   title="Expiring"
                   tone="warning"
-                  count={data.expiry.length}
-                  items={data.expiry.slice(0, 4).map((i) => ({
+                  count={expiring.data?.length ?? 0}
+                  items={(expiring.data ?? []).slice(0, 4).map((i) => ({
                     id: i.id,
                     primary: i.equipmentName,
                     secondary:
@@ -166,18 +180,51 @@ export default function DashboardPage() {
                         : "No expiry date",
                   }))}
                   emptyText="Nothing expiring soon"
+                  control={
+                    <label className="flex items-center gap-2 text-xs text-slate-400">
+                      <span>Window</span>
+                      <select
+                        value={expiryMonths}
+                        onChange={(e) => setExpiryMonths(Number(e.target.value))}
+                        className="rounded-lg border border-white/10 bg-ink-800/60 px-2 py-1 text-xs text-white outline-none focus:border-brand-400/50"
+                      >
+                        {[3, 4, 5, 6].map((m) => (
+                          <option key={m} value={m}>
+                            {m} months
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  }
                 />
                 <AlertColumn
                   icon={TrendingDown}
                   title="Low stock"
                   tone="danger"
-                  count={data.lowStock.length}
-                  items={data.lowStock.slice(0, 4).map((i) => ({
+                  count={lowStock.data?.length ?? 0}
+                  items={(lowStock.data ?? []).slice(0, 4).map((i) => ({
                     id: i.id,
                     primary: i.equipmentName,
                     secondary: `${i.availableQuantity} of ${i.quantity} available`,
                   }))}
                   emptyText="Stock levels are healthy"
+                  control={
+                    <label className="flex items-center gap-2 text-xs text-slate-400">
+                      <span>Threshold ≤</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={999}
+                        value={lowStockThreshold}
+                        onChange={(e) =>
+                          setLowStockThreshold(
+                            Math.max(1, Number(e.target.value) || 1),
+                          )
+                        }
+                        className="w-16 rounded-lg border border-white/10 bg-ink-800/60 px-2 py-1 text-xs text-white outline-none focus:border-brand-400/50"
+                      />
+                    </label>
+                  }
                 />
                 {canManage && (
                   <AlertColumn
@@ -271,6 +318,7 @@ function AlertColumn({
   count,
   items,
   emptyText,
+  control,
 }: {
   icon: typeof CalendarClock;
   title: string;
@@ -278,6 +326,7 @@ function AlertColumn({
   count: number;
   items: { id: number; primary: string; secondary: string }[];
   emptyText: string;
+  control?: React.ReactNode;
 }) {
   const toneText = tone === "warning" ? "text-amber-300" : "text-rose-300";
   const toneBg = tone === "warning" ? "bg-amber-500/10" : "bg-rose-500/10";
@@ -292,6 +341,7 @@ function AlertColumn({
         </div>
         <span className={cn("text-lg font-semibold", toneText)}>{count}</span>
       </div>
+      {control && <div className="mt-2.5">{control}</div>}
       <div className="mt-3 flex-1 space-y-2.5">
         {items.length === 0 ? (
           <p className="py-4 text-center text-xs text-slate-500">{emptyText}</p>

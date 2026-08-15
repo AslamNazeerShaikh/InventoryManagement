@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, RefreshCw, Search, Trash2, UserPlus, Users } from "lucide-react";
+import { ClipboardList, Pencil, Plus, RefreshCw, Search, Trash2, UserPlus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import { useAsync } from "@/lib/use-async";
@@ -23,6 +23,7 @@ import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { RoleBadge } from "@/components/domain/status-badges";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { UserFormModal } from "@/components/users/user-form-modal";
+import { UserAssignmentsModal } from "@/components/users/user-assignments-modal";
 import { FadeIn } from "@/components/ui/reveal";
 
 const PAGE_SIZE = 8;
@@ -40,6 +41,9 @@ export default function UsersPage() {
   const [editing, setEditing] = useState<UserDto | null>(null);
   const [toDelete, setToDelete] = useState<UserDto | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [viewAssignmentsFor, setViewAssignmentsFor] = useState<UserDto | null>(
+    null,
+  );
 
   const filtered = useMemo(() => {
     let list = data ?? [];
@@ -212,6 +216,13 @@ export default function UsersPage() {
                     <TD>
                       <div className="flex items-center justify-end gap-1">
                         <button
+                          onClick={() => setViewAssignmentsFor(u)}
+                          title="View assignments"
+                          className="flex size-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white/[0.06] hover:text-white"
+                        >
+                          <ClipboardList className="size-4" />
+                        </button>
+                        <button
                           onClick={() => {
                             setEditing(u);
                             setFormOpen(true);
@@ -254,6 +265,11 @@ export default function UsersPage() {
         onClose={() => setFormOpen(false)}
         initial={editing}
         onSaved={reload}
+      />
+      <UserAssignmentsModal
+        open={Boolean(viewAssignmentsFor)}
+        onClose={() => setViewAssignmentsFor(null)}
+        user={viewAssignmentsFor}
       />
       <ConfirmDialog
         open={Boolean(toDelete)}
