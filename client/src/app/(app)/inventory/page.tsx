@@ -1,22 +1,27 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   Boxes,
   Eye,
+  Filter,
   Pencil,
   Plus,
   RefreshCw,
   Search,
   Trash2,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import { useAsync } from "@/lib/use-async";
+import { useDebouncedValue } from "@/lib/use-debounce";
 import { useAuth } from "@/lib/auth-context";
 import { InventoryStatus, type InventoryDto } from "@/lib/types";
 import {
   cn,
+  dateInputToIso,
   daysUntil,
   formatDate,
   inventoryStatusLabels,
@@ -29,7 +34,6 @@ import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
-import { Pagination } from "@/components/ui/pagination";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { InventoryStatusBadge } from "@/components/domain/status-badges";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -41,14 +45,15 @@ const PAGE_SIZE = 8;
 
 export default function InventoryPage() {
   const { canManage, isAdmin } = useAuth();
-  const { data, loading, error, reload } = useAsync(
-    () => api.inventory.list(),
-    [],
-  );
 
-  const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("all");
+  // Text search is debounced so we hit the server once per pause, not per keystroke.
+  const [searchInput, setSearchInput] = useState("");
+  const searchTerm = useDebouncedValue(searchInput, 350);
+  const [category, setCategory] = useState("");
   const [status, setStatus] = useState("all");
+  const [expiryFrom, setExpiryFrom] = useState("");
+  const [expiryTo, setExpiryTo] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
 
   const [formOpen, setFormOpen] = useState(false);
@@ -57,30 +62,56 @@ export default function InventoryPage() {
   const [toDelete, setToDelete] = useState<InventoryDto | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const categories = useMemo(() => {
-    const set = new Set<string>();
-    (data ?? []).forEach((i) => i.category && set.add(i.category));
-    return Array.from(set).sort();
-  }, [data]);
+  const hasCriteria = Boolean(
+    searchTerm.trim() ||
+      category.trim() ||
+      status !== "all" ||
+      expiryFrom ||
+      expiryTo,
+  );
 
-  const filtered = useMemo(() => {
-    let list = data ?? [];
-    const term = search.trim().toLowerCase();
-    if (term) {
-      list = list.filter((i) =>
-        [i.equipmentName, i.barcode, i.serialNumber, i.brand, i.category, i.model]
-          .filter(Boolean)
-          .some((f) => f!.toLowerCase().includes(term)),
-      );
+  // Reset to the first page whenever the criteria change.
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, category, status, expiryFrom, expiryTo]);
+
+  // Server-side data: filtered search (POST /search) when any criteria are set,
+  // otherwise a plain page (GET /paged) that also returns an accurate total.
+  const { data, loading, error, reload } = useAsync(async () => {
+    if (hasCriteria) {
+      const results = await api.inventory.search({
+        searchTerm: searchTerm.trim() || null,
+        category: category.trim() || null,
+        status: status === "all" ? null : (Number(status) as InventoryStatus),
+        expiryDateFrom: dateInputToIso(expiryFrom),
+        expiryDateTo: dateInputToIso(expiryTo),
+        pageNumber: page,
+        pageSize: PAGE_SIZE,
+      });
+      // /search returns a page of items without a total, so infer "has next".
+      return {
+        items: results,
+        total: null as number | null,
+        hasNext: results.length === PAGE_SIZE,
+      };
     }
-    if (category !== "all") list = list.filter((i) => (i.category ?? "") === category);
-    if (status !== "all") list = list.filter((i) => i.status === Number(status));
-    return list;
-  }, [data, search, category, status]);
+    const result = await api.inventory.paged(page, PAGE_SIZE);
+    return {
+      items: result.data,
+      total: result.totalCount,
+      hasNext: result.hasNextPage,
+    };
+  }, [hasCriteria, searchTerm, category, status, expiryFrom, expiryTo, page]);
 
-  useEffect(() => setPage(1), [search, category, status]);
+  const items = data?.items ?? [];
 
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  function clearFilters() {
+    setSearchInput("");
+    setCategory("");
+    setStatus("all");
+    setExpiryFrom("");
+    setExpiryTo("");
+  }
 
   async function handleDelete() {
     if (!toDelete) return;
@@ -140,23 +171,11 @@ export default function InventoryPage() {
             <Input
               placeholder="Search by name, barcode, serial, brand…"
               className="pl-10"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
             />
           </div>
           <div className="flex gap-3">
-            <Select
-              className="min-w-[9rem]"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            >
-              <option value="all">All categories</option>
-              {categories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </Select>
             <Select
               className="min-w-[9rem]"
               value={status}
@@ -171,28 +190,74 @@ export default function InventoryPage() {
                   </option>
                 ))}
             </Select>
+            <Button
+              variant={showFilters ? "subtle" : "secondary"}
+              onClick={() => setShowFilters((s) => !s)}
+              leftIcon={<Filter className="size-4" />}
+            >
+              Filters
+            </Button>
           </div>
         </div>
 
+        {showFilters && (
+          <div className="grid gap-3 border-b border-white/[0.06] p-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <label className="mb-1 block text-xs text-slate-400">Category</label>
+              <Input
+                placeholder="e.g. Diagnostic Equipment"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-400">Expiry from</label>
+              <Input
+                type="date"
+                value={expiryFrom}
+                onChange={(e) => setExpiryFrom(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-400">Expiry to</label>
+              <Input
+                type="date"
+                value={expiryTo}
+                onChange={(e) => setExpiryTo(e.target.value)}
+              />
+            </div>
+            <div className="flex items-end">
+              <Button
+                variant="ghost"
+                onClick={clearFilters}
+                leftIcon={<X className="size-4" />}
+                disabled={!hasCriteria}
+              >
+                Clear
+              </Button>
+            </div>
+          </div>
+        )}
+
         {error ? (
           <ErrorState message={error} onRetry={reload} />
-        ) : loading ? (
+        ) : loading && !data ? (
           <div className="space-y-2 p-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <Skeleton key={i} className="h-14" />
             ))}
           </div>
-        ) : filtered.length === 0 ? (
+        ) : items.length === 0 ? (
           <EmptyState
             icon={Boxes}
-            title={data && data.length > 0 ? "No matching items" : "No inventory yet"}
+            title={hasCriteria ? "No matching items" : "No inventory yet"}
             description={
-              data && data.length > 0
+              hasCriteria
                 ? "Try adjusting your search or filters."
                 : "Add your first piece of equipment to get started."
             }
             action={
-              canManage && (!data || data.length === 0) ? (
+              canManage && !hasCriteria ? (
                 <Button
                   onClick={() => {
                     setEditing(null);
@@ -219,7 +284,7 @@ export default function InventoryPage() {
                 </TR>
               </THead>
               <TBody>
-                {paged.map((item) => {
+                {items.map((item) => {
                   const days = daysUntil(item.expiryDate);
                   const expiryTone =
                     days == null
@@ -237,9 +302,12 @@ export default function InventoryPage() {
                             <Boxes className="size-4 text-slate-400" />
                           </div>
                           <div className="min-w-0">
-                            <p className="truncate font-medium text-white">
+                            <Link
+                              href={`/inventory/${item.id}`}
+                              className="block truncate font-medium text-white transition hover:text-brand-300"
+                            >
                               {item.equipmentName}
-                            </p>
+                            </Link>
                             <p className="truncate text-xs text-slate-500">
                               {[item.category, item.brand]
                                 .filter(Boolean)
@@ -317,12 +385,31 @@ export default function InventoryPage() {
                 })}
               </TBody>
             </Table>
-            <Pagination
-              page={page}
-              pageSize={PAGE_SIZE}
-              total={filtered.length}
-              onPage={setPage}
-            />
+            <div className="flex items-center justify-between gap-3 border-t border-white/[0.06] px-4 py-3 text-sm">
+              <p className="text-slate-400">
+                {data?.total != null
+                  ? `Page ${page} · ${data.total} item${data.total === 1 ? "" : "s"} total`
+                  : `Page ${page}`}
+              </p>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1 || loading}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setPage((p) => p + 1)}
+                  disabled={!data?.hasNext || loading}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
           </FadeIn>
         )}
       </Card>
