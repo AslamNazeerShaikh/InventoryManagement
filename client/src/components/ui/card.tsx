@@ -16,7 +16,7 @@ export function CardHeader({
   return (
     <div
       className={cn(
-        "flex items-start justify-between gap-4 border-b border-white/[0.06] px-5 py-4",
+        "flex items-start justify-between gap-4 border-b border-line px-5 py-4",
         className,
       )}
       {...props}
@@ -59,7 +59,7 @@ export function CardFooter({
   return (
     <div
       className={cn(
-        "flex items-center justify-end gap-3 border-t border-white/[0.06] px-5 py-4",
+        "flex items-center justify-end gap-3 border-t border-line px-5 py-4",
         className,
       )}
       {...props}
