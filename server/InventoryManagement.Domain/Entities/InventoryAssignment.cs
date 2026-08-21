@@ -42,6 +42,20 @@ public class InventoryAssignment : BaseEntity
     /// <summary>Foreign key to the user who processed the return (nullable).</summary>
     public int? ReturnedToUserId { get; set; }
 
+    /// <summary>
+    /// Quantity already returned so far. Supports partial returns: while
+    /// <c>0 &lt; ReturnedQuantity &lt; AssignedQuantity</c> the assignment stays
+    /// <see cref="AssignmentStatus.Active"/>; it becomes <see cref="AssignmentStatus.Returned"/>
+    /// only when the full quantity has been returned.
+    /// </summary>
+    public int ReturnedQuantity { get; set; }
+
+    /// <summary>Number of times the assignment's expected return date has been renewed/extended.</summary>
+    public int RenewalCount { get; set; }
+
+    /// <summary>Condition recorded when the item was (last) returned, if captured.</summary>
+    public ReturnCondition? ReturnCondition { get; set; }
+
     /// <summary>Navigation to the assigned inventory item (required).</summary>
     public virtual Inventory Inventory { get; set; } = null!;
 

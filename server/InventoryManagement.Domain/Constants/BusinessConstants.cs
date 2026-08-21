@@ -26,5 +26,12 @@ public static class BusinessConstants
     {
         public const int DefaultAssignmentDays = 30;
         public const int MaxAssignmentDays = 365;
+        public const int DefaultDueSoonDays = 7;
+    }
+
+    public static class Maintenance
+    {
+        public const int DefaultDueWindowDays = 30;
+        public const int MaxDueWindowDays = 365;
     }
 }

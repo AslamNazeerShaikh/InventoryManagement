@@ -3,6 +3,10 @@ import { twMerge } from "tailwind-merge";
 import {
   AssignmentStatus,
   InventoryStatus,
+  MaintenanceStatus,
+  MaintenanceType,
+  ReturnCondition,
+  StockMovementType,
   UserRole,
 } from "@/lib/types";
 
@@ -170,6 +174,62 @@ export const assignmentStatusTones: Record<AssignmentStatus, Tone> = {
   [AssignmentStatus.Expired]: "warning",
   [AssignmentStatus.Lost]: "danger",
   [AssignmentStatus.Damaged]: "danger",
+};
+
+export const stockMovementLabels: Record<StockMovementType, string> = {
+  [StockMovementType.Received]: "Received",
+  [StockMovementType.Assigned]: "Assigned",
+  [StockMovementType.Returned]: "Returned",
+  [StockMovementType.Adjusted]: "Adjusted",
+  [StockMovementType.Transferred]: "Transferred",
+  [StockMovementType.Disposed]: "Disposed",
+};
+
+export const stockMovementTones: Record<StockMovementType, Tone> = {
+  [StockMovementType.Received]: "success",
+  [StockMovementType.Assigned]: "info",
+  [StockMovementType.Returned]: "brand",
+  [StockMovementType.Adjusted]: "warning",
+  [StockMovementType.Transferred]: "violet",
+  [StockMovementType.Disposed]: "danger",
+};
+
+export const maintenanceTypeLabels: Record<MaintenanceType, string> = {
+  [MaintenanceType.Inspection]: "Inspection",
+  [MaintenanceType.Calibration]: "Calibration",
+  [MaintenanceType.Service]: "Service",
+  [MaintenanceType.Repair]: "Repair",
+  [MaintenanceType.Cleaning]: "Cleaning",
+};
+
+export const maintenanceStatusLabels: Record<MaintenanceStatus, string> = {
+  [MaintenanceStatus.Scheduled]: "Scheduled",
+  [MaintenanceStatus.Due]: "Due",
+  [MaintenanceStatus.Overdue]: "Overdue",
+  [MaintenanceStatus.Completed]: "Completed",
+  [MaintenanceStatus.Cancelled]: "Cancelled",
+};
+
+export const maintenanceStatusTones: Record<MaintenanceStatus, Tone> = {
+  [MaintenanceStatus.Scheduled]: "info",
+  [MaintenanceStatus.Due]: "warning",
+  [MaintenanceStatus.Overdue]: "danger",
+  [MaintenanceStatus.Completed]: "success",
+  [MaintenanceStatus.Cancelled]: "neutral",
+};
+
+export const returnConditionLabels: Record<ReturnCondition, string> = {
+  [ReturnCondition.Good]: "Good",
+  [ReturnCondition.Damaged]: "Damaged",
+  [ReturnCondition.Lost]: "Lost",
+  [ReturnCondition.NeedsRepair]: "Needs repair",
+};
+
+export const returnConditionTones: Record<ReturnCondition, Tone> = {
+  [ReturnCondition.Good]: "success",
+  [ReturnCondition.Damaged]: "danger",
+  [ReturnCondition.Lost]: "danger",
+  [ReturnCondition.NeedsRepair]: "warning",
 };
 
 export function enumOptions<T extends Record<string, string | number>>(

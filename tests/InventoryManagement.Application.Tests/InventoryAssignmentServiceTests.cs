@@ -33,7 +33,11 @@ public sealed class InventoryAssignmentServiceTests : IDisposable
             _context,
             new UserRepository(_context),
             new InventoryRepository(_context),
-            new InventoryAssignmentRepository(_context)
+            new InventoryAssignmentRepository(_context),
+            new StockMovementRepository(_context),
+            new SupplierRepository(_context),
+            new LocationRepository(_context),
+            new MaintenanceScheduleRepository(_context)
         );
         _service = new InventoryAssignmentService(
             unitOfWork,
@@ -92,6 +96,75 @@ public sealed class InventoryAssignmentServiceTests : IDisposable
 
         Assert.True(result.IsFailure);
         Assert.Equal(ResultErrorType.NotFound, result.ErrorType);
+    }
+
+    [Fact]
+    public async Task PartialReturn_KeepsAssignmentActive_AndCreditsPartialStock()
+    {
+        // Item Qty 5 / Available 3, one active assignment of 2.
+        var (assignment, _) = await SeedActiveAssignmentAsync();
+
+        var result = await _service.ReturnAssignmentAsync(
+            new ReturnInventoryAssignmentDto
+            {
+                AssignmentId = assignment.Id,
+                ReturnQuantity = 1,
+                ReturnCondition = ReturnCondition.Good,
+            },
+            returnedToUserId: 1
+        );
+
+        Assert.True(result.IsSuccess);
+        var stored = await _context.InventoryAssignments.AsNoTracking().SingleAsync();
+        Assert.Equal(1, stored.ReturnedQuantity);
+        Assert.Equal(AssignmentStatus.Active, stored.Status); // 1 of 2 still out
+        var inventory = await _context.Inventories.AsNoTracking().SingleAsync();
+        Assert.Equal(4, inventory.AvailableQuantity); // 3 + 1 returned
+
+        var movement = await _context.StockMovements.AsNoTracking().SingleAsync();
+        Assert.Equal(StockMovementType.Returned, movement.MovementType);
+        Assert.Equal(1, movement.QuantityChange);
+    }
+
+    [Fact]
+    public async Task ReturnLost_ReducesOwnedQuantity_InsteadOfCrediting()
+    {
+        var (assignment, _) = await SeedActiveAssignmentAsync(); // Qty 5, Available 3, assigned 2
+
+        var result = await _service.ReturnAssignmentAsync(
+            new ReturnInventoryAssignmentDto
+            {
+                AssignmentId = assignment.Id,
+                ReturnCondition = ReturnCondition.Lost,
+            },
+            returnedToUserId: 1
+        );
+
+        Assert.True(result.IsSuccess);
+        var inventory = await _context.Inventories.AsNoTracking().SingleAsync();
+        Assert.Equal(3, inventory.Quantity); // 5 - 2 lost
+        Assert.Equal(3, inventory.AvailableQuantity); // unchanged (never came back)
+        var stored = await _context.InventoryAssignments.AsNoTracking().SingleAsync();
+        Assert.Equal(AssignmentStatus.Lost, stored.Status);
+    }
+
+    [Fact]
+    public async Task Renew_ExtendsExpectedReturn_AndIncrementsCount()
+    {
+        var (assignment, _) = await SeedActiveAssignmentAsync();
+
+        var result = await _service.RenewAssignmentAsync(
+            new RenewInventoryAssignmentDto
+            {
+                AssignmentId = assignment.Id,
+                NewExpectedReturnDate = DateTime.UtcNow.AddDays(30),
+            }
+        );
+
+        Assert.True(result.IsSuccess);
+        var stored = await _context.InventoryAssignments.AsNoTracking().SingleAsync();
+        Assert.Equal(1, stored.RenewalCount);
+        Assert.NotNull(stored.ExpectedReturnDate);
     }
 
     /// <summary>Seeds a user, an inventory item (Qty 5, Available 3) and one active assignment (Qty 2).</summary>

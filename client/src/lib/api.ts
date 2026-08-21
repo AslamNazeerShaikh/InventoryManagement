@@ -1,22 +1,38 @@
 import { API_BASE_URL, STORAGE_KEYS } from "@/lib/config";
 import type {
+  AdjustStockDto,
   AlertsSummaryDto,
   ApiResponse,
   AssignmentHistoryDto,
   AuthResponseDto,
   ChangePasswordDto,
+  CompleteMaintenanceDto,
   CreateInventoryAssignmentDto,
   CreateInventoryDto,
+  CreateLocationDto,
+  CreateMaintenanceScheduleDto,
+  CreateSupplierDto,
   CreateUserDto,
   DashboardStatsDto,
+  DisposeStockDto,
   InventoryAssignmentDto,
   InventoryDto,
   InventorySearchDto,
+  LocationDto,
   LoginDto,
+  MaintenanceScheduleDto,
   PagedResult,
+  ReceiveStockDto,
+  RenewInventoryAssignmentDto,
   ReturnInventoryAssignmentDto,
+  StockMovementDto,
+  SupplierDto,
+  TransferStockDto,
   UpdateInventoryAssignmentDto,
   UpdateInventoryDto,
+  UpdateLocationDto,
+  UpdateMaintenanceScheduleDto,
+  UpdateSupplierDto,
   UpdateUserDto,
   UserDto,
 } from "@/lib/types";
@@ -270,6 +286,22 @@ export const api = {
     update: (id: number, dto: UpdateInventoryDto, idempotencyKey?: string) =>
       put<InventoryDto>(`/api/inventory/${id}`, dto, { idempotencyKey }),
     remove: (id: number) => del<boolean>(`/api/inventory/${id}`),
+    reorder: () => get<InventoryDto[]>("/api/inventory/reorder"),
+    movements: (id: number) =>
+      get<StockMovementDto[]>(`/api/inventory/${id}/movements`),
+    recentMovements: (pageNumber: number, pageSize: number) =>
+      get<PagedResult<StockMovementDto>>("/api/inventory/movements/recent", {
+        pageNumber,
+        pageSize,
+      }),
+    receive: (id: number, dto: ReceiveStockDto, idempotencyKey?: string) =>
+      post<InventoryDto>(`/api/inventory/${id}/receive`, dto, { idempotencyKey }),
+    adjust: (id: number, dto: AdjustStockDto, idempotencyKey?: string) =>
+      post<InventoryDto>(`/api/inventory/${id}/adjust`, dto, { idempotencyKey }),
+    dispose: (id: number, dto: DisposeStockDto, idempotencyKey?: string) =>
+      post<InventoryDto>(`/api/inventory/${id}/dispose`, dto, { idempotencyKey }),
+    transfer: (id: number, dto: TransferStockDto, idempotencyKey?: string) =>
+      post<InventoryDto>(`/api/inventory/${id}/transfer`, dto, { idempotencyKey }),
   },
 
   assignments: {
@@ -305,6 +337,62 @@ export const api = {
       put<InventoryAssignmentDto>(`/api/inventoryassignments/${id}`, dto),
     return: (dto: ReturnInventoryAssignmentDto, idempotencyKey?: string) =>
       post<boolean>("/api/inventoryassignments/return", dto, { idempotencyKey }),
+    renew: (dto: RenewInventoryAssignmentDto) =>
+      post<InventoryAssignmentDto>("/api/inventoryassignments/renew", dto),
+    dueSoon: (daysAhead = 7) =>
+      get<InventoryAssignmentDto[]>("/api/inventoryassignments/due-soon", {
+        daysAhead,
+      }),
+  },
+
+  suppliers: {
+    list: (activeOnly = false) =>
+      get<SupplierDto[]>("/api/suppliers", { activeOnly }),
+    paged: (pageNumber: number, pageSize: number) =>
+      get<PagedResult<SupplierDto>>("/api/suppliers/paged", {
+        pageNumber,
+        pageSize,
+      }),
+    byId: (id: number) => get<SupplierDto>(`/api/suppliers/${id}`),
+    create: (dto: CreateSupplierDto) => post<SupplierDto>("/api/suppliers", dto),
+    update: (id: number, dto: UpdateSupplierDto) =>
+      put<SupplierDto>(`/api/suppliers/${id}`, dto),
+    remove: (id: number) => del<boolean>(`/api/suppliers/${id}`),
+  },
+
+  locations: {
+    list: (activeOnly = false) =>
+      get<LocationDto[]>("/api/locations", { activeOnly }),
+    paged: (pageNumber: number, pageSize: number) =>
+      get<PagedResult<LocationDto>>("/api/locations/paged", {
+        pageNumber,
+        pageSize,
+      }),
+    byId: (id: number) => get<LocationDto>(`/api/locations/${id}`),
+    create: (dto: CreateLocationDto) => post<LocationDto>("/api/locations", dto),
+    update: (id: number, dto: UpdateLocationDto) =>
+      put<LocationDto>(`/api/locations/${id}`, dto),
+    remove: (id: number) => del<boolean>(`/api/locations/${id}`),
+  },
+
+  maintenance: {
+    paged: (pageNumber: number, pageSize: number) =>
+      get<PagedResult<MaintenanceScheduleDto>>("/api/maintenance/paged", {
+        pageNumber,
+        pageSize,
+      }),
+    due: (daysAhead = 30) =>
+      get<MaintenanceScheduleDto[]>("/api/maintenance/due", { daysAhead }),
+    byInventory: (inventoryId: number) =>
+      get<MaintenanceScheduleDto[]>(`/api/maintenance/inventory/${inventoryId}`),
+    byId: (id: number) => get<MaintenanceScheduleDto>(`/api/maintenance/${id}`),
+    create: (dto: CreateMaintenanceScheduleDto) =>
+      post<MaintenanceScheduleDto>("/api/maintenance", dto),
+    update: (id: number, dto: UpdateMaintenanceScheduleDto) =>
+      put<MaintenanceScheduleDto>(`/api/maintenance/${id}`, dto),
+    complete: (id: number, dto: CompleteMaintenanceDto) =>
+      post<MaintenanceScheduleDto>(`/api/maintenance/${id}/complete`, dto),
+    remove: (id: number) => del<boolean>(`/api/maintenance/${id}`),
   },
 
   dashboard: {

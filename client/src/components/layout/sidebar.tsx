@@ -13,8 +13,8 @@ import { cn, roleLabels, roleTones } from "@/lib/utils";
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
-  const { canManageUsers } = useAuth();
-  const items = navItems.filter((i) => i.visible({ canManageUsers }));
+  const { canManageUsers, canManage } = useAuth();
+  const items = navItems.filter((i) => i.visible({ canManageUsers, canManage }));
 
   return (
     <nav className="flex flex-1 flex-col gap-1 px-3">

@@ -65,6 +65,30 @@ public class InventoryDto
 
     /// <summary>Whether an expiry alert has been sent.</summary>
     public bool IsExpiryAlertSent { get; set; }
+
+    /// <summary>Optional reorder point (par level); null disables reorder tracking.</summary>
+    public int? ReorderLevel { get; set; }
+
+    /// <summary>Optional suggested reorder quantity.</summary>
+    public int? ReorderQuantity { get; set; }
+
+    /// <summary>Optional managed supplier identifier.</summary>
+    public int? SupplierId { get; set; }
+
+    /// <summary>Managed supplier name, if linked.</summary>
+    public string? SupplierName { get; set; }
+
+    /// <summary>Optional managed location identifier.</summary>
+    public int? LocationId { get; set; }
+
+    /// <summary>Managed location name, if linked.</summary>
+    public string? LocationName { get; set; }
+
+    /// <summary>
+    /// Whether the item needs reordering (a reorder level is set and available quantity is at or
+    /// below it). Computed server-side so clients don't reimplement the rule.
+    /// </summary>
+    public bool NeedsReorder { get; set; }
 }
 
 /// <summary>Payload for creating an inventory item.</summary>
@@ -124,6 +148,22 @@ public class CreateInventoryDto
     /// <summary>Optional notes (≤1000 chars).</summary>
     [StringLength(1000)]
     public string? Notes { get; set; }
+
+    /// <summary>Optional reorder point (par level; ≥0).</summary>
+    [Range(0, int.MaxValue)]
+    public int? ReorderLevel { get; set; }
+
+    /// <summary>Optional suggested reorder quantity (≥0).</summary>
+    [Range(0, int.MaxValue)]
+    public int? ReorderQuantity { get; set; }
+
+    /// <summary>Optional managed supplier identifier.</summary>
+    [Range(1, int.MaxValue)]
+    public int? SupplierId { get; set; }
+
+    /// <summary>Optional managed location identifier.</summary>
+    [Range(1, int.MaxValue)]
+    public int? LocationId { get; set; }
 }
 
 /// <summary>Payload for updating an inventory item.</summary>
@@ -187,6 +227,22 @@ public class UpdateInventoryDto
     /// <summary>Optional notes (≤1000 chars).</summary>
     [StringLength(1000)]
     public string? Notes { get; set; }
+
+    /// <summary>Optional reorder point (par level; ≥0).</summary>
+    [Range(0, int.MaxValue)]
+    public int? ReorderLevel { get; set; }
+
+    /// <summary>Optional suggested reorder quantity (≥0).</summary>
+    [Range(0, int.MaxValue)]
+    public int? ReorderQuantity { get; set; }
+
+    /// <summary>Optional managed supplier identifier.</summary>
+    [Range(1, int.MaxValue)]
+    public int? SupplierId { get; set; }
+
+    /// <summary>Optional managed location identifier.</summary>
+    [Range(1, int.MaxValue)]
+    public int? LocationId { get; set; }
 }
 
 /// <summary>Search/filter criteria for inventory queries.</summary>

@@ -60,6 +60,11 @@ public interface IInventoryService
         CancellationToken cancellationToken = default
     );
 
+    /// <summary>Lists items that need reordering (a reorder level is set and available quantity is at/below it).</summary>
+    Task<Result<IEnumerable<InventoryDto>>> GetReorderInventoriesAsync(
+        CancellationToken cancellationToken = default
+    );
+
     /// <summary>Searches items using the supplied criteria (executed SQL-side).</summary>
     Task<Result<IEnumerable<InventoryDto>>> SearchInventoriesAsync(
         InventorySearchDto searchDto,

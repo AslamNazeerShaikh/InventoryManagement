@@ -7,6 +7,8 @@ import {
   InventoryStatus,
   type CreateInventoryDto,
   type InventoryDto,
+  type LocationDto,
+  type SupplierDto,
   type UpdateInventoryDto,
 } from "@/lib/types";
 import {
@@ -37,6 +39,10 @@ interface Draft {
   manufactureDate: string;
   notes: string;
   status: InventoryStatus;
+  reorderLevel: string;
+  reorderQuantity: string;
+  supplierId: string;
+  locationId: string;
 }
 
 function emptyDraft(): Draft {
@@ -56,6 +62,10 @@ function emptyDraft(): Draft {
     manufactureDate: "",
     notes: "",
     status: InventoryStatus.Available,
+    reorderLevel: "",
+    reorderQuantity: "",
+    supplierId: "",
+    locationId: "",
   };
 }
 
@@ -76,6 +86,11 @@ function fromDto(dto: InventoryDto): Draft {
     manufactureDate: toDateInputValue(dto.manufactureDate),
     notes: dto.notes ?? "",
     status: dto.status,
+    reorderLevel: dto.reorderLevel != null ? String(dto.reorderLevel) : "",
+    reorderQuantity:
+      dto.reorderQuantity != null ? String(dto.reorderQuantity) : "",
+    supplierId: dto.supplierId != null ? String(dto.supplierId) : "",
+    locationId: dto.locationId != null ? String(dto.locationId) : "",
   };
 }
 
@@ -93,10 +108,25 @@ export function InventoryFormModal({
   const isEdit = Boolean(initial);
   const [draft, setDraft] = useState<Draft>(emptyDraft());
   const [saving, setSaving] = useState(false);
+  const [suppliers, setSuppliers] = useState<SupplierDto[]>([]);
+  const [locations, setLocations] = useState<LocationDto[]>([]);
 
   useEffect(() => {
     if (open) setDraft(initial ? fromDto(initial) : emptyDraft());
   }, [open, initial]);
+
+  // Lazy-load active managed suppliers/locations for the optional linking dropdowns.
+  useEffect(() => {
+    if (!open) return;
+    api.suppliers
+      .list(true)
+      .then(setSuppliers)
+      .catch(() => setSuppliers([]));
+    api.locations
+      .list(true)
+      .then(setLocations)
+      .catch(() => setLocations([]));
+  }, [open]);
 
   const set =
     <K extends keyof Draft>(key: K) =>
@@ -134,6 +164,12 @@ export function InventoryFormModal({
       expiryDate: dateInputToIso(draft.expiryDate),
       manufactureDate: dateInputToIso(draft.manufactureDate),
       notes: draft.notes.trim() || null,
+      reorderLevel:
+        draft.reorderLevel === "" ? null : Number(draft.reorderLevel),
+      reorderQuantity:
+        draft.reorderQuantity === "" ? null : Number(draft.reorderQuantity),
+      supplierId: draft.supplierId ? Number(draft.supplierId) : null,
+      locationId: draft.locationId ? Number(draft.locationId) : null,
     };
 
     setSaving(true);
@@ -248,6 +284,45 @@ export function InventoryFormModal({
           </Field>
           <Field label="Location">
             <Input value={draft.location} onChange={set("location")} placeholder="Storage Room A" />
+          </Field>
+          <Field label="Managed supplier" hint="Optional link">
+            <Select value={draft.supplierId} onChange={set("supplierId")}>
+              <option value="">None</option>
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Managed location" hint="Optional link">
+            <Select value={draft.locationId} onChange={set("locationId")}>
+              <option value="">None</option>
+              {locations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                  {l.code ? ` (${l.code})` : ""}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Reorder level" hint="Par level">
+            <Input
+              type="number"
+              min={0}
+              value={draft.reorderLevel}
+              onChange={set("reorderLevel")}
+              placeholder="5"
+            />
+          </Field>
+          <Field label="Reorder quantity" hint="Suggested">
+            <Input
+              type="number"
+              min={0}
+              value={draft.reorderQuantity}
+              onChange={set("reorderQuantity")}
+              placeholder="50"
+            />
           </Field>
           {isEdit && (
             <Field label="Status">

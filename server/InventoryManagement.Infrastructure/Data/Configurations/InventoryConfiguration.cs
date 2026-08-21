@@ -77,6 +77,10 @@ public class InventoryConfiguration : IEntityTypeConfiguration<Inventory>
 
         builder.HasIndex(i => i.CreatedByUserId).HasDatabaseName("IX_Inventories_CreatedByUserId");
 
+        builder.HasIndex(i => i.SupplierId).HasDatabaseName("IX_Inventories_SupplierId");
+
+        builder.HasIndex(i => i.LocationId).HasDatabaseName("IX_Inventories_LocationId");
+
         // Relationships
         builder
             .HasMany(i => i.Assignments)
@@ -89,6 +93,20 @@ public class InventoryConfiguration : IEntityTypeConfiguration<Inventory>
             .WithMany(u => u.CreatedInventories)
             .HasForeignKey(i => i.CreatedByUserId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        // Optional managed supplier/location references (additive to the legacy free-text columns).
+        // Restrict so a supplier/location that is still referenced cannot be hard-deleted.
+        builder
+            .HasOne(i => i.SupplierEntity)
+            .WithMany(s => s.Inventories)
+            .HasForeignKey(i => i.SupplierId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder
+            .HasOne(i => i.LocationEntity)
+            .WithMany(l => l.Inventories)
+            .HasForeignKey(i => i.LocationId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         // Query filters for soft delete
         builder.HasQueryFilter(i => !i.IsDeleted);

@@ -18,6 +18,18 @@ public interface IUnitOfWork
     /// <summary>Assignment repository bound to the shared session.</summary>
     IInventoryAssignmentRepository InventoryAssignments { get; }
 
+    /// <summary>Stock-movement ledger repository bound to the shared session.</summary>
+    IStockMovementRepository StockMovements { get; }
+
+    /// <summary>Supplier repository bound to the shared session.</summary>
+    ISupplierRepository Suppliers { get; }
+
+    /// <summary>Location repository bound to the shared session.</summary>
+    ILocationRepository Locations { get; }
+
+    /// <summary>Maintenance-schedule repository bound to the shared session.</summary>
+    IMaintenanceScheduleRepository MaintenanceSchedules { get; }
+
     /// <summary>
     /// Persists all staged changes. Translates optimistic-concurrency failures into a
     /// <see cref="Exceptions.ConcurrencyConflictException"/> for consistent handling.

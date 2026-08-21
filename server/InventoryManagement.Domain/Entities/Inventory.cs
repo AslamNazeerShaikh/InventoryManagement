@@ -58,6 +58,28 @@ public class Inventory : BaseEntity
     /// <summary>Optional operational notes.</summary>
     public string? Notes { get; set; }
 
+    /// <summary>
+    /// Optional reorder point (par level). When set and <see cref="AvailableQuantity"/> falls to or
+    /// below this value, the item is flagged for reordering. Null disables reorder tracking.
+    /// </summary>
+    public int? ReorderLevel { get; set; }
+
+    /// <summary>Optional suggested quantity to order when a reorder is triggered.</summary>
+    public int? ReorderQuantity { get; set; }
+
+    /// <summary>
+    /// Optional foreign key to a managed <see cref="Entities.Supplier"/>. Additive to the legacy
+    /// free-text <see cref="Supplier"/> string, which is retained for backward compatibility.
+    /// </summary>
+    public int? SupplierId { get; set; }
+
+    /// <summary>
+    /// Optional foreign key to a managed <see cref="Entities.Location"/> (the item's current primary
+    /// location). Additive to the legacy free-text <see cref="Location"/> string, retained for
+    /// backward compatibility.
+    /// </summary>
+    public int? LocationId { get; set; }
+
     /// <summary>Whether an expiry alert has already been dispatched (prevents duplicates).</summary>
     public bool IsExpiryAlertSent { get; set; } = false;
 
@@ -67,7 +89,21 @@ public class Inventory : BaseEntity
     /// <summary>Navigation to the creating user.</summary>
     public virtual User? CreatedByUser { get; set; }
 
+    /// <summary>Navigation to the managed supplier (see <see cref="SupplierId"/>).</summary>
+    public virtual Supplier? SupplierEntity { get; set; }
+
+    /// <summary>Navigation to the managed storage location (see <see cref="LocationId"/>).</summary>
+    public virtual Location? LocationEntity { get; set; }
+
     /// <summary>Assignment history for this item.</summary>
     public virtual ICollection<InventoryAssignment> Assignments { get; set; } =
         new List<InventoryAssignment>();
+
+    /// <summary>Append-only stock-movement ledger for this item.</summary>
+    public virtual ICollection<StockMovement> StockMovements { get; set; } =
+        new List<StockMovement>();
+
+    /// <summary>Maintenance/calibration schedules for this item.</summary>
+    public virtual ICollection<MaintenanceSchedule> MaintenanceSchedules { get; set; } =
+        new List<MaintenanceSchedule>();
 }

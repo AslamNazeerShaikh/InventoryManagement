@@ -233,6 +233,24 @@ public class InventoryAssignmentsController : ApiControllerBase
         );
     }
 
+    /// <summary>Renews/extends an active assignment's expected return date (Admin or Provider).</summary>
+    [HttpPost("renew")]
+    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    public async Task<ActionResult<ApiResponse<InventoryAssignmentDto>>> RenewAssignment(
+        [FromBody] RenewInventoryAssignmentDto renewAssignmentDto,
+        CancellationToken cancellationToken
+    ) => HandleResult(await _assignmentService.RenewAssignmentAsync(renewAssignmentDto, cancellationToken));
+
+    /// <summary>Lists active assignments due within the given number of days (Admin or Provider).</summary>
+    [HttpGet("due-soon")]
+    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    public async Task<
+        ActionResult<ApiResponse<IEnumerable<InventoryAssignmentDto>>>
+    > GetDueSoonAssignments(
+        [FromQuery] int daysAhead = 7,
+        CancellationToken cancellationToken = default
+    ) => HandleResult(await _assignmentService.GetDueSoonAssignmentsAsync(daysAhead, cancellationToken));
+
     private bool TryGetCallerId(out int userId) =>
         int.TryParse(User.FindFirst(AuthConstants.Claims.UserId)?.Value, out userId);
 

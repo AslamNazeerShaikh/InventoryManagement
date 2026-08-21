@@ -136,6 +136,21 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
                         inventory.Status = InventoryStatus.Assigned;
                     }
 
+                    // Record the allocation in the audit ledger. The assignment navigation lets EF
+                    // resolve the (identity) foreign key when both rows are inserted together.
+                    var movement = new StockMovement
+                    {
+                        InventoryId = inventory.Id,
+                        Assignment = assignment,
+                        MovementType = StockMovementType.Assigned,
+                        QuantityChange = -createAssignmentDto.AssignedQuantity,
+                        BalanceAfter = inventory.AvailableQuantity,
+                        PerformedByUserId = assignedByUserId,
+                        Reason = "Assigned to recipient",
+                        Notes = createAssignmentDto.AssignmentNotes,
+                    };
+                    await _unitOfWork.StockMovements.AddAsync(movement, ct).ConfigureAwait(false);
+
                     await _unitOfWork.SaveChangesAsync(ct).ConfigureAwait(false);
                     return Succeeded(assignment.Id);
                 },
@@ -286,17 +301,50 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
                         return Failed("Assignment is not active", ResultErrorType.Validation);
                     }
 
-                    assignment.Status = AssignmentStatus.Returned;
-                    assignment.ReturnDate = DateTime.UtcNow;
+                    var outstanding = assignment.AssignedQuantity - assignment.ReturnedQuantity;
+                    var returnQty = returnAssignmentDto.ReturnQuantity ?? outstanding;
+                    if (returnQty < 1 || returnQty > outstanding)
+                    {
+                        return Failed(
+                            $"Return quantity must be between 1 and {outstanding}",
+                            ResultErrorType.Validation
+                        );
+                    }
+
+                    var condition = returnAssignmentDto.ReturnCondition ?? ReturnCondition.Good;
+                    var inventory = assignment.Inventory;
+
+                    if (condition == ReturnCondition.Lost)
+                    {
+                        // Lost units never came back: remove them from the owned total instead of
+                        // crediting available stock (keeps the AvailableQuantity <= Quantity invariant).
+                        inventory.Quantity = Math.Max(0, inventory.Quantity - returnQty);
+                    }
+                    else
+                    {
+                        // Physically returned: credit available stock, capped at the owned total.
+                        inventory.AvailableQuantity = Math.Min(
+                            inventory.Quantity,
+                            inventory.AvailableQuantity + returnQty
+                        );
+                    }
+
+                    assignment.ReturnedQuantity += returnQty;
                     assignment.ReturnedToUserId = returnedToUserId;
                     assignment.ReturnNotes = returnAssignmentDto.ReturnNotes;
+                    assignment.ReturnCondition = condition;
 
-                    var inventory = assignment.Inventory;
-                    // Restore stock without exceeding the total owned quantity (invariant guard).
-                    inventory.AvailableQuantity = Math.Min(
-                        inventory.Quantity,
-                        inventory.AvailableQuantity + assignment.AssignedQuantity
-                    );
+                    // A partial return leaves the assignment Active with the remainder still out.
+                    if (assignment.ReturnedQuantity >= assignment.AssignedQuantity)
+                    {
+                        assignment.ReturnDate = DateTime.UtcNow;
+                        assignment.Status = condition switch
+                        {
+                            ReturnCondition.Lost => AssignmentStatus.Lost,
+                            ReturnCondition.Damaged => AssignmentStatus.Damaged,
+                            _ => AssignmentStatus.Returned,
+                        };
+                    }
 
                     // Only a fully-assigned item returns to Available; never override
                     // Damaged/Expired/Disposed lifecycle states.
@@ -307,6 +355,27 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
                     {
                         inventory.Status = InventoryStatus.Available;
                     }
+
+                    // Ledger: a physical return credits stock (Returned); a lost item leaves
+                    // circulation (Disposed) so the timeline reflects the true stock effect.
+                    var movement = new StockMovement
+                    {
+                        InventoryId = inventory.Id,
+                        AssignmentId = assignment.Id,
+                        MovementType =
+                            condition == ReturnCondition.Lost
+                                ? StockMovementType.Disposed
+                                : StockMovementType.Returned,
+                        QuantityChange = condition == ReturnCondition.Lost ? -returnQty : returnQty,
+                        BalanceAfter = inventory.AvailableQuantity,
+                        PerformedByUserId = returnedToUserId,
+                        Reason =
+                            condition == ReturnCondition.Lost
+                                ? "Reported lost on return"
+                                : $"Returned ({condition})",
+                        Notes = returnAssignmentDto.ReturnNotes,
+                    };
+                    await _unitOfWork.StockMovements.AddAsync(movement, ct).ConfigureAwait(false);
 
                     await _unitOfWork.SaveChangesAsync(ct).ConfigureAwait(false);
                     return Succeeded(assignment.Id);
@@ -325,6 +394,82 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
             returnAssignmentDto.AssignmentId
         );
         return Result<bool>.Success(true, "Assignment returned successfully");
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<InventoryAssignmentDto>> RenewAssignmentAsync(
+        RenewInventoryAssignmentDto renewAssignmentDto,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var assignment = await _unitOfWork
+            .InventoryAssignments.FirstOrDefaultAsync(
+                x => x.Id == renewAssignmentDto.AssignmentId,
+                asNoTracking: false,
+                cancellationToken: cancellationToken
+            )
+            .ConfigureAwait(false);
+        if (assignment is null)
+        {
+            return Result<InventoryAssignmentDto>.NotFound("Assignment not found");
+        }
+
+        if (assignment.Status != AssignmentStatus.Active)
+        {
+            return Result<InventoryAssignmentDto>.Validation("Can only renew active assignments");
+        }
+
+        if (renewAssignmentDto.NewExpectedReturnDate <= DateTime.UtcNow)
+        {
+            return Result<InventoryAssignmentDto>.Validation(
+                "The new expected return date must be in the future"
+            );
+        }
+
+        assignment.ExpectedReturnDate = renewAssignmentDto.NewExpectedReturnDate;
+        assignment.RenewalCount += 1;
+        if (!string.IsNullOrWhiteSpace(renewAssignmentDto.Notes))
+        {
+            assignment.AssignmentNotes = string.IsNullOrWhiteSpace(assignment.AssignmentNotes)
+                ? renewAssignmentDto.Notes
+                : $"{assignment.AssignmentNotes} | Renewed: {renewAssignmentDto.Notes}";
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("Renewed assignment {AssignmentId}.", assignment.Id);
+        var updated = await LoadForDtoAsync(assignment.Id, cancellationToken).ConfigureAwait(false);
+        return Result<InventoryAssignmentDto>.Success(
+            updated!.ToDto(),
+            "Assignment renewed successfully"
+        );
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<IEnumerable<InventoryAssignmentDto>>> GetDueSoonAssignmentsAsync(
+        int daysAhead = 7,
+        CancellationToken cancellationToken = default
+    )
+    {
+        daysAhead = Math.Clamp(daysAhead, 0, BusinessConstants.Assignment.MaxAssignmentDays);
+        var now = DateTime.UtcNow;
+        var until = now.AddDays(daysAhead);
+
+        // Active, not yet overdue, and due within the window — all filtered SQL-side.
+        var assignments = await _unitOfWork
+            .InventoryAssignments.ListAsync(
+                predicate: x =>
+                    x.Status == AssignmentStatus.Active
+                    && x.ExpectedReturnDate != null
+                    && x.ExpectedReturnDate >= now
+                    && x.ExpectedReturnDate <= until,
+                include: q =>
+                    q.Include(x => x.Inventory).Include(x => x.User).Include(x => x.AssignedByUser),
+                orderBy: q => q.OrderBy(x => x.ExpectedReturnDate),
+                cancellationToken: cancellationToken
+            )
+            .ConfigureAwait(false);
+        return Result<IEnumerable<InventoryAssignmentDto>>.Success(assignments.ToDto());
     }
 
     /// <inheritdoc />

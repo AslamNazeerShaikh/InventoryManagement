@@ -410,3 +410,57 @@ Logout/password change → Users.RefreshToken = null
 ```
 
 This comprehensive data flow documentation provides a complete understanding of how the Inventory Management System processes requests, manages data transformations, handles errors, and maintains security throughout the application layers.
+
+---
+
+## Group 2 Flows (stock ledger, transfers, lifecycle, maintenance)
+
+Every stock-changing operation runs inside `IUnitOfWork.ExecuteInTransactionAsync`, mutates the item, and **appends one `StockMovement` ledger row** in the same transaction. The GUID `ConcurrencyToken` protects against lost updates/oversell (conflicts surface as HTTP 409).
+
+### Receive / Adjust / Dispose
+
+```
+POST /api/inventory/{id}/receive|adjust|dispose
+  → StockService (transaction)
+      Receive : Quantity += qty; AvailableQuantity += qty; (Assigned→Available if now > 0)
+      Adjust  : Quantity += delta; AvailableQuantity += delta   (reject if available would go < 0)
+      Dispose : Quantity -= qty; AvailableQuantity -= qty; (Quantity 0 → Status=Disposed)
+  → append StockMovement(type, signed QuantityChange, BalanceAfter = AvailableQuantity)
+  → SaveChanges (ConcurrencyToken check) → reload InventoryDto
+```
+
+### Transfer (whole-item location move)
+
+```
+POST /api/inventory/{id}/transfer { toLocationId }
+  → validate target location exists and differs from current
+  → Inventory.LocationId = target; Inventory.Location = target.Name (legacy string kept in sync)
+  → append StockMovement(Transferred, QuantityChange = 0, From/To LocationId)
+```
+
+### Assignment lifecycle (partial return, condition, renew)
+
+```
+POST /api/inventoryassignments/return { assignmentId, returnQuantity?, returnCondition? }
+  → returnQty = returnQuantity ?? outstanding   (validated 1..outstanding)
+      Lost      : Inventory.Quantity -= returnQty      → append Disposed(-qty)
+      otherwise : Inventory.AvailableQuantity += returnQty (capped) → append Returned(+qty)
+  → ReturnedQuantity += returnQty; fully returned ⇒ Status = Returned/Damaged/Lost + ReturnDate
+POST /api/inventoryassignments/renew { assignmentId, newExpectedReturnDate }
+  → validate active + future date → ExpectedReturnDate = new; RenewalCount++
+GET  /api/inventoryassignments/due-soon?daysAhead=N → active, not overdue, due within N days
+```
+
+### Maintenance (recurring completion + due tracking)
+
+```
+POST /api/maintenance/{id}/complete { performedAt?, nextDueAt?, notes? }
+  → LastPerformedAt = performedAt ?? now; PerformedByUserId = caller
+  → next = nextDueAt ?? (IntervalDays ? performedAt + IntervalDays : null)
+      next present ⇒ NextDueAt = next; Status normalized (Scheduled/Due/Overdue)
+      else         ⇒ Status = Completed   (one-off closes)
+GET /api/maintenance/due?daysAhead=N → open schedules (not Completed/Cancelled) due within N days
+```
+
+Non-terminal maintenance statuses are **normalized from the due date at read time** (Overdue if past,
+Due within the reminder window, else Scheduled), so the UI is accurate without a background job.

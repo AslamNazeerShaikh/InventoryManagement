@@ -31,7 +31,10 @@ public sealed class InventoryService : IInventoryService
     {
         var inventories = await _unitOfWork
             .Inventories.ListAsync(
-                include: q => q.Include(x => x.CreatedByUser),
+                include: q =>
+                    q.Include(x => x.CreatedByUser)
+                        .Include(x => x.SupplierEntity)
+                        .Include(x => x.LocationEntity),
                 orderBy: q => q.OrderBy(x => x.EquipmentName),
                 cancellationToken: cancellationToken
             )
@@ -242,6 +245,17 @@ public sealed class InventoryService : IInventoryService
     }
 
     /// <inheritdoc />
+    public async Task<Result<IEnumerable<InventoryDto>>> GetReorderInventoriesAsync(
+        CancellationToken cancellationToken = default
+    )
+    {
+        var inventories = await _unitOfWork
+            .Inventories.GetReorderInventoriesAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return Result<IEnumerable<InventoryDto>>.Success(inventories.ToDto());
+    }
+
+    /// <inheritdoc />
     public async Task<Result<IEnumerable<InventoryDto>>> SearchInventoriesAsync(
         InventorySearchDto searchDto,
         CancellationToken cancellationToken = default
@@ -272,7 +286,10 @@ public sealed class InventoryService : IInventoryService
                     && (status == null || x.Status == status)
                     && (from == null || (x.ExpiryDate != null && x.ExpiryDate >= from))
                     && (to == null || (x.ExpiryDate != null && x.ExpiryDate <= to)),
-                include: q => q.Include(x => x.CreatedByUser),
+                include: q =>
+                    q.Include(x => x.CreatedByUser)
+                        .Include(x => x.SupplierEntity)
+                        .Include(x => x.LocationEntity),
                 orderBy: q => q.OrderBy(x => x.EquipmentName),
                 cancellationToken: cancellationToken
             )
@@ -295,7 +312,10 @@ public sealed class InventoryService : IInventoryService
                 pageNumber,
                 pageSize,
                 orderBy: q => q.OrderByDescending(x => x.CreatedAt),
-                include: q => q.Include(x => x.CreatedByUser),
+                include: q =>
+                    q.Include(x => x.CreatedByUser)
+                        .Include(x => x.SupplierEntity)
+                        .Include(x => x.LocationEntity),
                 cancellationToken: cancellationToken
             )
             .ConfigureAwait(false);
@@ -327,7 +347,10 @@ public sealed class InventoryService : IInventoryService
     private Task<Inventory?> LoadWithCreatorAsync(int id, CancellationToken cancellationToken) =>
         _unitOfWork.Inventories.FirstOrDefaultAsync(
             x => x.Id == id,
-            include: q => q.Include(i => i.CreatedByUser),
+            include: q =>
+                q.Include(i => i.CreatedByUser)
+                    .Include(i => i.SupplierEntity)
+                    .Include(i => i.LocationEntity),
             cancellationToken: cancellationToken
         );
 }
