@@ -390,3 +390,45 @@ GET /health
 ```
 
 This database schema provides a robust foundation with relationships, optimistic concurrency, idempotency safety, and performance optimizations.
+
+---
+
+## Group 2 Additions (stock ledger, suppliers, locations, maintenance)
+
+Migration: `AddGroup2StockSupplierLocationMaintenance` (applied on startup via `MigrateAsync`). All changes are **additive** — existing tables/columns are unchanged and the legacy free-text `Inventories.Supplier`/`Inventories.Location` columns are retained.
+
+### New columns on existing tables
+
+- **Inventories:** `ReorderLevel` (INTEGER NULL), `ReorderQuantity` (INTEGER NULL), `SupplierId` (INTEGER NULL, FK → Suppliers, ON DELETE RESTRICT), `LocationId` (INTEGER NULL, FK → Locations, ON DELETE RESTRICT). Indexes: `IX_Inventories_SupplierId`, `IX_Inventories_LocationId`.
+- **InventoryAssignments:** `ReturnedQuantity` (INTEGER NOT NULL, default 0), `RenewalCount` (INTEGER NOT NULL, default 0), `ReturnCondition` (INTEGER NULL).
+
+### New tables
+
+**StockMovements** (append-only ledger)
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| Id | INTEGER | PK, identity |
+| InventoryId | INTEGER | NOT NULL, FK → Inventories (RESTRICT) |
+| MovementType | INTEGER | Received/Assigned/Returned/Adjusted/Transferred/Disposed |
+| QuantityChange | INTEGER | signed delta |
+| BalanceAfter | INTEGER | available-qty snapshot after the movement |
+| Reason / Notes | TEXT | ≤500 / ≤1000 |
+| UnitCost | decimal(18,2) | NULL |
+| PerformedByUserId | INTEGER | NULL, FK → Users (SET NULL) |
+| AssignmentId | INTEGER | NULL, FK → InventoryAssignments (SET NULL) |
+| FromLocationId / ToLocationId | INTEGER | NULL, FK → Locations (SET NULL) |
+| SupplierId | INTEGER | NULL, FK → Suppliers (SET NULL) |
+| + BaseEntity audit/soft-delete/ConcurrencyToken columns | | |
+
+Indexes: `IX_StockMovements_InventoryId`, `_CreatedAt`, `_MovementType`, `_PerformedByUserId`, `_AssignmentId`, `_FromLocationId`, `_ToLocationId`, `_SupplierId`.
+
+**Suppliers** — `Name` (unique filtered index `IX_Suppliers_Name` where `IsDeleted = 0`), `ContactName`, `Email`, `Phone`, `Address`, `Website`, `LeadTimeDays` (NULL), `IsActive`, `Notes` + BaseEntity columns. Index: `IX_Suppliers_IsActive`.
+
+**Locations** — `Name`, `Code` (unique filtered index where `Code IS NOT NULL AND IsDeleted = 0`), `Description`, `ParentLocationId` (self-FK, RESTRICT), `IsActive` + BaseEntity columns. Indexes: `IX_Locations_Code`, `_ParentLocationId`, `_IsActive`.
+
+**MaintenanceSchedules** — `InventoryId` (FK → Inventories RESTRICT), `MaintenanceType`, `Title`, `Description`, `IntervalDays` (NULL), `LastPerformedAt` (NULL), `NextDueAt`, `Status`, `PerformedByUserId` (FK → Users SET NULL), `Notes` + BaseEntity columns. Indexes: `IX_MaintenanceSchedules_InventoryId`, `_NextDueAt`, `_Status`.
+
+### Delete behavior rationale
+
+The required `Inventory` reference on movements/schedules uses **RESTRICT** so history is never orphaned; optional references (actor, assignment, from/to location, supplier) use **SET NULL** so a ledger row always survives. All new entities carry the soft-delete query filter to stay consistent with their filtered principals.

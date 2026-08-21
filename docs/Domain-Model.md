@@ -502,3 +502,44 @@ public interface IAuthService
 ```
 
 This domain model provides a secure foundation with clean layering, explicit `Result<T>` outcomes, validated DTOs, typed configuration, provider-agnostic concurrency, and explicit abstractions for data access, tokens, hashing, and secrets.
+
+---
+
+## Group 2 Additions (domain-agnostic backend extensions)
+
+These additions are **additive and non-breaking**: the legacy free-text `Inventory.Supplier`/`Inventory.Location` strings are retained, and every new column/entity is optional. New concepts use generic vocabulary so the backend stays any-industry.
+
+### New entities
+
+- **`StockMovement : BaseEntity`** — append-only ledger row. `InventoryId`, `MovementType` (`StockMovementType`), signed `QuantityChange`, `BalanceAfter` (available-qty snapshot), `Reason`, `Notes`, `UnitCost?`, and optional links `PerformedByUserId`, `AssignmentId`, `FromLocationId`, `ToLocationId`, `SupplierId`. Never edited/deleted after creation — it is the auditable lifecycle of an item.
+- **`Supplier : BaseEntity`** — `Name` (unique among non-deleted), `ContactName`, `Email`, `Phone`, `Address`, `Website`, `LeadTimeDays?`, `IsActive`, `Notes`, and an `Inventories` back-collection.
+- **`Location : BaseEntity`** — `Name`, `Code?` (unique among non-deleted when present), `Description`, `ParentLocationId?` (self-referencing hierarchy: site → room → shelf → bin), `IsActive`, `ParentLocation`/`ChildLocations`/`Inventories` navs.
+- **`MaintenanceSchedule : BaseEntity`** — `InventoryId`, `MaintenanceType`, `Title`, `Description?`, `IntervalDays?`, `LastPerformedAt?`, `NextDueAt`, `Status` (`MaintenanceStatus`), `PerformedByUserId?`, `Notes`.
+
+### Extended entities
+
+- **`Inventory`** — added `ReorderLevel?`, `ReorderQuantity?`, `SupplierId?` (+ `SupplierEntity` nav), `LocationId?` (+ `LocationEntity` nav), and `StockMovements`/`MaintenanceSchedules` collections.
+- **`InventoryAssignment`** — added `ReturnedQuantity` (partial returns), `RenewalCount` (renew/extend), `ReturnCondition?` (condition-on-return).
+
+### New enums
+
+```csharp
+public enum StockMovementType { Received = 1, Assigned, Returned, Adjusted, Transferred, Disposed }
+public enum MaintenanceType { Inspection = 1, Calibration, Service, Repair, Cleaning }
+public enum MaintenanceStatus { Scheduled = 1, Due, Overdue, Completed, Cancelled }
+public enum ReturnCondition { Good = 1, Damaged, Lost, NeedsRepair }
+```
+
+### New DTOs
+
+- **Stock:** `StockMovementDto`, `ReceiveStockDto`, `AdjustStockDto`, `DisposeStockDto`, `TransferStockDto`.
+- **Suppliers:** `SupplierDto`, `CreateSupplierDto`, `UpdateSupplierDto`.
+- **Locations:** `LocationDto`, `CreateLocationDto`, `UpdateLocationDto`.
+- **Maintenance:** `MaintenanceScheduleDto`, `CreateMaintenanceScheduleDto`, `UpdateMaintenanceScheduleDto`, `CompleteMaintenanceDto`.
+- **Assignments:** `InventoryAssignmentDto` gains `ReturnedQuantity`/`OutstandingQuantity`/`RenewalCount`/`ReturnCondition`; `ReturnInventoryAssignmentDto` gains `ReturnQuantity?`/`ReturnCondition?`; new `RenewInventoryAssignmentDto`.
+- **Inventory:** `InventoryDto` gains `ReorderLevel`/`ReorderQuantity`/`SupplierId`/`SupplierName`/`LocationId`/`LocationName`/`NeedsReorder` (computed); create/update DTOs gain the reorder + managed FK fields.
+
+### New repository & service contracts
+
+- Repositories: `IStockMovementRepository`, `ISupplierRepository`, `ILocationRepository`, `IMaintenanceScheduleRepository` (added to `IUnitOfWork`).
+- Services: `IStockService`, `ISupplierService`, `ILocationService`, `IMaintenanceService` — all return `Result<T>`; stock/return operations run inside `ExecuteInTransactionAsync` and append `StockMovement` rows.

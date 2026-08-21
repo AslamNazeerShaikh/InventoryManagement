@@ -20,13 +20,21 @@ public sealed class UnitOfWork : IUnitOfWork
         AppDbContext dbContext,
         IUserRepository users,
         IInventoryRepository inventories,
-        IInventoryAssignmentRepository inventoryAssignments
+        IInventoryAssignmentRepository inventoryAssignments,
+        IStockMovementRepository stockMovements,
+        ISupplierRepository suppliers,
+        ILocationRepository locations,
+        IMaintenanceScheduleRepository maintenanceSchedules
     )
     {
         _dbContext = dbContext;
         Users = users;
         Inventories = inventories;
         InventoryAssignments = inventoryAssignments;
+        StockMovements = stockMovements;
+        Suppliers = suppliers;
+        Locations = locations;
+        MaintenanceSchedules = maintenanceSchedules;
     }
 
     /// <inheritdoc />
@@ -37,6 +45,18 @@ public sealed class UnitOfWork : IUnitOfWork
 
     /// <inheritdoc />
     public IInventoryAssignmentRepository InventoryAssignments { get; }
+
+    /// <inheritdoc />
+    public IStockMovementRepository StockMovements { get; }
+
+    /// <inheritdoc />
+    public ISupplierRepository Suppliers { get; }
+
+    /// <inheritdoc />
+    public ILocationRepository Locations { get; }
+
+    /// <inheritdoc />
+    public IMaintenanceScheduleRepository MaintenanceSchedules { get; }
 
     /// <inheritdoc />
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

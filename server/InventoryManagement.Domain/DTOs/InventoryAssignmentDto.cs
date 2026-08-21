@@ -33,6 +33,18 @@ public class InventoryAssignmentDto
     /// <summary>Quantity assigned.</summary>
     public int AssignedQuantity { get; set; }
 
+    /// <summary>Quantity returned so far (supports partial returns).</summary>
+    public int ReturnedQuantity { get; set; }
+
+    /// <summary>Quantity still outstanding (assigned minus returned).</summary>
+    public int OutstandingQuantity { get; set; }
+
+    /// <summary>Number of times the expected return date has been renewed.</summary>
+    public int RenewalCount { get; set; }
+
+    /// <summary>Condition recorded at (last) return, if captured.</summary>
+    public ReturnCondition? ReturnCondition { get; set; }
+
     /// <summary>UTC assignment timestamp.</summary>
     public DateTime AssignedDate { get; set; }
 
@@ -84,16 +96,43 @@ public class CreateInventoryAssignmentDto
     public string? AssignmentNotes { get; set; }
 }
 
-/// <summary>Payload for returning an assignment.</summary>
+/// <summary>Payload for returning an assignment (supports partial returns).</summary>
 public class ReturnInventoryAssignmentDto
 {
     /// <summary>Assignment to return (required).</summary>
     [Range(1, int.MaxValue)]
     public int AssignmentId { get; set; }
 
+    /// <summary>
+    /// Optional quantity to return. When omitted, the full outstanding quantity is returned. When
+    /// less than the outstanding quantity, the assignment stays active with the remainder still out.
+    /// </summary>
+    [Range(1, int.MaxValue)]
+    public int? ReturnQuantity { get; set; }
+
+    /// <summary>Optional condition the item is returned in.</summary>
+    [EnumDataType(typeof(ReturnCondition))]
+    public ReturnCondition? ReturnCondition { get; set; }
+
     /// <summary>Optional return notes (≤1000 chars).</summary>
     [StringLength(1000)]
     public string? ReturnNotes { get; set; }
+}
+
+/// <summary>Payload for renewing/extending an active assignment's expected return date.</summary>
+public class RenewInventoryAssignmentDto
+{
+    /// <summary>Assignment to renew (required).</summary>
+    [Range(1, int.MaxValue)]
+    public int AssignmentId { get; set; }
+
+    /// <summary>New expected return date (required; must be in the future).</summary>
+    [Required]
+    public DateTime NewExpectedReturnDate { get; set; }
+
+    /// <summary>Optional notes about the renewal (≤1000 chars).</summary>
+    [StringLength(1000)]
+    public string? Notes { get; set; }
 }
 
 /// <summary>Payload for updating an active assignment.</summary>

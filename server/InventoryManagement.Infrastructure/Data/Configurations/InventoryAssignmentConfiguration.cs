@@ -26,6 +26,12 @@ public class InventoryAssignmentConfiguration : IEntityTypeConfiguration<Invento
 
         builder.Property(ia => ia.ReturnNotes).HasMaxLength(1000);
 
+        builder.Property(ia => ia.ReturnedQuantity).IsRequired().HasDefaultValue(0);
+
+        builder.Property(ia => ia.RenewalCount).IsRequired().HasDefaultValue(0);
+
+        builder.Property(ia => ia.ReturnCondition).HasConversion<int>();
+
         // Auditing fields from BaseEntity
         builder.Property(ia => ia.CreatedAt).IsRequired();
 

@@ -34,6 +34,18 @@ public class AppDbContext : DbContext
     /// <summary>Inventory assignments table.</summary>
     public DbSet<InventoryAssignment> InventoryAssignments => Set<InventoryAssignment>();
 
+    /// <summary>Append-only stock-movement ledger table.</summary>
+    public DbSet<StockMovement> StockMovements => Set<StockMovement>();
+
+    /// <summary>Managed suppliers/vendors table.</summary>
+    public DbSet<Supplier> Suppliers => Set<Supplier>();
+
+    /// <summary>Managed storage locations table.</summary>
+    public DbSet<Location> Locations => Set<Location>();
+
+    /// <summary>Maintenance/calibration schedules table.</summary>
+    public DbSet<MaintenanceSchedule> MaintenanceSchedules => Set<MaintenanceSchedule>();
+
     /// <summary>Idempotency records table.</summary>
     public DbSet<IdempotentRequest> IdempotentRequests => Set<IdempotentRequest>();
 

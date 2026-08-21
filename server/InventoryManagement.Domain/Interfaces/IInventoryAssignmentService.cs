@@ -31,10 +31,16 @@ public interface IInventoryAssignmentService
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>Processes a return, restoring stock atomically.</summary>
+    /// <summary>Processes a return (full or partial), restoring stock atomically.</summary>
     Task<Result<bool>> ReturnAssignmentAsync(
         ReturnInventoryAssignmentDto returnAssignmentDto,
         int returnedToUserId,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>Renews/extends an active assignment's expected return date.</summary>
+    Task<Result<InventoryAssignmentDto>> RenewAssignmentAsync(
+        RenewInventoryAssignmentDto renewAssignmentDto,
         CancellationToken cancellationToken = default
     );
 
@@ -57,6 +63,12 @@ public interface IInventoryAssignmentService
 
     /// <summary>Lists overdue assignments.</summary>
     Task<Result<IEnumerable<InventoryAssignmentDto>>> GetOverdueAssignmentsAsync(
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>Lists active assignments due within the given number of days (upcoming return reminders).</summary>
+    Task<Result<IEnumerable<InventoryAssignmentDto>>> GetDueSoonAssignmentsAsync(
+        int daysAhead = 7,
         CancellationToken cancellationToken = default
     );
 

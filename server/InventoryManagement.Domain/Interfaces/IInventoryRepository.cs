@@ -55,4 +55,19 @@ public interface IInventoryRepository : IGenericRepository<Inventory>
         int threshold = 5,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>Lists items that need reordering (a reorder level is set and available quantity is at/below it).</summary>
+    Task<IReadOnlyList<Inventory>> GetReorderInventoriesAsync(
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>Returns item counts grouped by managed supplier id (single query; avoids N+1).</summary>
+    Task<IReadOnlyDictionary<int, int>> GetCountsBySupplierAsync(
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>Returns item counts grouped by managed location id (single query; avoids N+1).</summary>
+    Task<IReadOnlyDictionary<int, int>> GetCountsByLocationAsync(
+        CancellationToken cancellationToken = default
+    );
 }

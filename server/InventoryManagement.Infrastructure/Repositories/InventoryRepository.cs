@@ -20,6 +20,9 @@ public class InventoryRepository : GenericRepository<Inventory>, IInventoryRepos
     ) =>
         await EntitySet
             .AsNoTracking()
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.SupplierEntity)
+            .Include(x => x.LocationEntity)
             .FirstOrDefaultAsync(x => x.Barcode == barcode, cancellationToken)
             .ConfigureAwait(false);
 
@@ -128,5 +131,47 @@ public class InventoryRepository : GenericRepository<Inventory>, IInventoryRepos
             .Include(x => x.CreatedByUser)
             .OrderBy(x => x.AvailableQuantity)
             .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Inventory>> GetReorderInventoriesAsync(
+        CancellationToken cancellationToken = default
+    ) =>
+        await EntitySet
+            .AsNoTracking()
+            .Where(x =>
+                x.ReorderLevel != null
+                && x.AvailableQuantity <= x.ReorderLevel
+                && x.Status == InventoryStatus.Available
+            )
+            .Include(x => x.CreatedByUser)
+            .Include(x => x.SupplierEntity)
+            .Include(x => x.LocationEntity)
+            .OrderBy(x => x.AvailableQuantity)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<int, int>> GetCountsBySupplierAsync(
+        CancellationToken cancellationToken = default
+    ) =>
+        await EntitySet
+            .AsNoTracking()
+            .Where(x => x.SupplierId != null)
+            .GroupBy(x => x.SupplierId!.Value)
+            .Select(g => new { SupplierId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.SupplierId, x => x.Count, cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<int, int>> GetCountsByLocationAsync(
+        CancellationToken cancellationToken = default
+    ) =>
+        await EntitySet
+            .AsNoTracking()
+            .Where(x => x.LocationId != null)
+            .GroupBy(x => x.LocationId!.Value)
+            .Select(g => new { LocationId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.LocationId, x => x.Count, cancellationToken)
             .ConfigureAwait(false);
 }

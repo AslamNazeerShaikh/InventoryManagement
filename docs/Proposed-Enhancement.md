@@ -94,6 +94,31 @@ All of **Group 1** is implemented, verified, documented.
 - One intentional UX change: the inventory list is now server-paginated, so it shows **"Page N · M total"** when browsing and **"Page N"** while searching (the `/search` endpoint returns a page without a grand total — handled via a full-page "has next" heuristic).
 - Servers are running for you: API on **:5050**, client dev on **:3000** (admin `admin@inventorymanagement.com` / `ChangeMe_LocalDev!2026`).
 
+---
+
+## Part B — Group 2 is implemented, verified, documented
+
+All of **Group 2** is implemented **full-stack** (small, domain-agnostic backend extensions + UI).
+Detailed change-log with per-file rationale/benefits → `Group2-Feature-Changes.md`.
+
+| # | Feature | Backend added | Surfaced in UI |
+|---|---|---|---|
+| 1 | **Receive/restock & reorder** | `POST inventory/{id}/receive`, `GET inventory/reorder`, `ReorderLevel`/`ReorderQuantity` + `NeedsReorder` | Item "Receive" action; "Reorder" badge; reorder fields in the item form |
+| 2 | **Stock-movement ledger / audit trail** | `StockMovement` entity; `GET inventory/{id}/movements`, `GET inventory/movements/recent`; every stock op appends a row | Item "Stock movements" timeline card |
+| 3 | **Locations & stock transfers** | `Location` entity (+ hierarchy); `POST inventory/{id}/transfer`; `/api/locations` CRUD | **Locations** page; item "Transfer" action |
+| 4 | **Suppliers/vendors directory** | `Supplier` entity (contacts + lead time); `/api/suppliers` CRUD; `Inventory.SupplierId` | **Suppliers** page; managed-supplier link in the item form |
+| 5 | **Assignment lifecycle extras** | Partial returns + condition-on-return; `POST …/renew`; `GET …/due-soon` | Return modal (qty + condition); Renew action |
+| 6 | **Maintenance / calibration** | `MaintenanceSchedule` entity; `/api/maintenance` CRUD + `{id}/complete` (recurring roll-forward) + `due` | **Maintenance** page; item "Maintenance" card |
+
+**Domain-agnostic & non-breaking (R1):** additive schema only; legacy free-text `Supplier`/`Location`
+strings retained; all new columns/tables optional; existing API contract unchanged. New concepts use
+generic vocabulary (movement/supplier/location/maintenance), never medical terms.
+
+**Verified (R3):** solution build clean; `next build` clean (15 routes); **53 tests** pass; 12 live
+end-to-end smoke tests against the running API.
+
+---
+
 ## Rules
 1. Rule 1: Follow & respect the existing design patterns and architecture patterns, but do not stay restricted or limited to them; instead, look to introduce new patterns if needed, which bring new optimization, future extensibility, old compatibility & maximum stability without introducing performance bottlenecks & security issues. Make sure we donot break any existing APIs & ABIs.
 

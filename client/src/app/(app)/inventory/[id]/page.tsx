@@ -3,23 +3,52 @@
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Boxes, History, Pencil, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowLeftRight,
+  Boxes,
+  History,
+  PackagePlus,
+  Pencil,
+  Plus,
+  SlidersHorizontal,
+  Trash2,
+  Wrench,
+} from "lucide-react";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import { useAsync } from "@/lib/use-async";
 import { useAuth } from "@/lib/auth-context";
-import type { AssignmentHistoryDto } from "@/lib/types";
-import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
+import type {
+  AssignmentHistoryDto,
+  MaintenanceScheduleDto,
+  StockMovementDto,
+} from "@/lib/types";
+import {
+  formatCurrency,
+  formatDate,
+  formatDateTime,
+  maintenanceTypeLabels,
+  stockMovementLabels,
+} from "@/lib/utils";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { ErrorState } from "@/components/ui/error-state";
 import {
   AssignmentStatusBadge,
   InventoryStatusBadge,
+  MaintenanceStatusBadge,
+  StockMovementBadge,
 } from "@/components/domain/status-badges";
 import { InventoryFormModal } from "@/components/inventory/inventory-form-modal";
+import {
+  StockActionModal,
+  type StockAction,
+} from "@/components/inventory/stock-action-modal";
+import { MaintenanceFormModal } from "@/components/maintenance/maintenance-form-modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { FadeIn } from "@/components/ui/reveal";
 
@@ -41,18 +70,24 @@ export default function InventoryDetailPage() {
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [stockAction, setStockAction] = useState<StockAction | null>(null);
+  const [addingSchedule, setAddingSchedule] = useState(false);
 
   const { data, loading, error, reload } = useAsync(async () => {
     const item = await api.inventory.byId(id);
     let history: AssignmentHistoryDto | null = null;
+    let movements: StockMovementDto[] = [];
+    let maintenance: MaintenanceScheduleDto[] = [];
     if (canManage) {
-      try {
-        history = await api.assignments.history(id);
-      } catch {
-        history = null;
-      }
+      [history, movements, maintenance] = await Promise.all([
+        api.assignments.history(id).catch(() => null),
+        api.inventory.movements(id).catch(() => [] as StockMovementDto[]),
+        api.maintenance
+          .byInventory(id)
+          .catch(() => [] as MaintenanceScheduleDto[]),
+      ]);
     }
-    return { item, history };
+    return { item, history, movements, maintenance };
   }, [id, canManage]);
 
   async function handleDelete() {
@@ -123,8 +158,54 @@ export default function InventoryDetailPage() {
               [item.category, item.brand].filter(Boolean).join(" · ") ||
               "Inventory item"
             }
-            actions={<InventoryStatusBadge status={item.status} />}
+            actions={
+              <div className="flex items-center gap-2">
+                {item.needsReorder && (
+                  <Badge tone="warning" dot>
+                    Reorder
+                  </Badge>
+                )}
+                <InventoryStatusBadge status={item.status} />
+              </div>
+            }
           />
+
+          {canManage && (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setStockAction("receive")}
+                leftIcon={<PackagePlus className="size-4" />}
+              >
+                Receive
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setStockAction("adjust")}
+                leftIcon={<SlidersHorizontal className="size-4" />}
+              >
+                Adjust
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setStockAction("transfer")}
+                leftIcon={<ArrowLeftRight className="size-4" />}
+              >
+                Transfer
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setStockAction("dispose")}
+                leftIcon={<Trash2 className="size-4" />}
+              >
+                Dispose
+              </Button>
+            </div>
+          )}
 
           <div className="grid gap-6 lg:grid-cols-3">
             <Card className="lg:col-span-2">
@@ -142,6 +223,18 @@ export default function InventoryDetailPage() {
                       style={{ width: `${pct}%` }}
                     />
                   </div>
+                  {(item.reorderLevel != null ||
+                    item.reorderQuantity != null) && (
+                    <p className="mt-2 text-xs text-slate-500">
+                      {item.reorderLevel != null &&
+                        `Reorder at ${item.reorderLevel}`}
+                      {item.reorderLevel != null &&
+                        item.reorderQuantity != null &&
+                        " · "}
+                      {item.reorderQuantity != null &&
+                        `Suggested order ${item.reorderQuantity}`}
+                    </p>
+                  )}
                 </div>
 
                 <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
@@ -156,8 +249,14 @@ export default function InventoryDetailPage() {
                   <Detail label="Serial" value={item.serialNumber} />
                   <Detail label="Brand" value={item.brand} />
                   <Detail label="Model" value={item.model} />
-                  <Detail label="Supplier" value={item.supplier} />
-                  <Detail label="Location" value={item.location} />
+                  <Detail
+                    label="Supplier"
+                    value={item.supplierName ?? item.supplier}
+                  />
+                  <Detail
+                    label="Location"
+                    value={item.locationName ?? item.location}
+                  />
                   <Detail
                     label="Purchase price"
                     value={formatCurrency(item.purchasePrice)}
@@ -242,6 +341,107 @@ export default function InventoryDetailPage() {
               </div>
             </Card>
           </div>
+
+          {canManage && (
+            <div className="grid gap-6 lg:grid-cols-2">
+              <Card>
+                <div className="border-b border-white/[0.06] px-5 py-4">
+                  <div className="flex items-center gap-2">
+                    <History className="size-4 text-slate-400" />
+                    <p className="text-sm font-medium text-white">
+                      Stock movements
+                    </p>
+                  </div>
+                </div>
+                <div className="p-5">
+                  {!data?.movements || data.movements.length === 0 ? (
+                    <p className="text-sm text-slate-500">No movements yet.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {data.movements.map((m) => (
+                        <li
+                          key={m.id}
+                          className="rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <StockMovementBadge type={m.movementType} />
+                            <span
+                              className={
+                                m.quantityChange > 0
+                                  ? "text-sm font-medium text-emerald-300"
+                                  : m.quantityChange < 0
+                                    ? "text-sm font-medium text-rose-300"
+                                    : "text-sm font-medium text-slate-400"
+                              }
+                            >
+                              {m.quantityChange > 0 ? "+" : ""}
+                              {m.quantityChange}
+                            </span>
+                          </div>
+                          <p className="mt-1 flex items-center justify-between gap-2 text-xs text-slate-500">
+                            <span className="truncate">
+                              {m.reason ?? stockMovementLabels[m.movementType]}
+                              {m.performedByUserName
+                                ? ` · ${m.performedByUserName}`
+                                : ""}
+                            </span>
+                            <span className="shrink-0">bal {m.balanceAfter}</span>
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-slate-600">
+                            {formatDateTime(m.createdAt)}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </Card>
+
+              <Card>
+                <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
+                  <div className="flex items-center gap-2">
+                    <Wrench className="size-4 text-slate-400" />
+                    <p className="text-sm font-medium text-white">Maintenance</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setAddingSchedule(true)}
+                    leftIcon={<Plus className="size-4" />}
+                  >
+                    Schedule
+                  </Button>
+                </div>
+                <div className="p-5">
+                  {!data?.maintenance || data.maintenance.length === 0 ? (
+                    <p className="text-sm text-slate-500">
+                      No maintenance scheduled.
+                    </p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {data.maintenance.map((m) => (
+                        <li
+                          key={m.id}
+                          className="rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-sm text-slate-200">
+                              {m.title}
+                            </p>
+                            <MaintenanceStatusBadge status={m.status} />
+                          </div>
+                          <p className="mt-0.5 truncate text-xs text-slate-500">
+                            {maintenanceTypeLabels[m.maintenanceType]} · due{" "}
+                            {formatDate(m.nextDueAt)}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </Card>
+            </div>
+          )}
         </FadeIn>
       )}
 
@@ -251,6 +451,23 @@ export default function InventoryDetailPage() {
         initial={item ?? null}
         onSaved={reload}
       />
+      {item && (
+        <>
+          <StockActionModal
+            open={stockAction !== null}
+            onClose={() => setStockAction(null)}
+            action={stockAction ?? "receive"}
+            item={item}
+            onSaved={reload}
+          />
+          <MaintenanceFormModal
+            open={addingSchedule}
+            onClose={() => setAddingSchedule(false)}
+            presetInventoryId={item.id}
+            onSaved={reload}
+          />
+        </>
+      )}
       <ConfirmDialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  CalendarClock,
   ClipboardList,
   CornerUpLeft,
   Pencil,
@@ -33,6 +34,7 @@ import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { AssignmentStatusBadge } from "@/components/domain/status-badges";
 import { AssignmentFormModal } from "@/components/assignments/assignment-form-modal";
 import { ReturnModal } from "@/components/assignments/return-modal";
+import { RenewModal } from "@/components/assignments/renew-modal";
 import { FadeIn } from "@/components/ui/reveal";
 
 const PAGE_SIZE = 8;
@@ -51,6 +53,7 @@ export default function AssignmentsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<InventoryAssignmentDto | null>(null);
   const [returning, setReturning] = useState<InventoryAssignmentDto | null>(null);
+  const [renewing, setRenewing] = useState<InventoryAssignmentDto | null>(null);
 
   const filtered = useMemo(() => {
     let list = data ?? [];
@@ -250,6 +253,13 @@ export default function AssignmentsPage() {
                                   Return
                                 </Button>
                                 <button
+                                  onClick={() => setRenewing(a)}
+                                  title="Renew"
+                                  className="flex size-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white/[0.06] hover:text-white"
+                                >
+                                  <CalendarClock className="size-4" />
+                                </button>
+                                <button
                                   onClick={() => {
                                     setEditing(a);
                                     setFormOpen(true);
@@ -289,6 +299,12 @@ export default function AssignmentsPage() {
         open={Boolean(returning)}
         onClose={() => setReturning(null)}
         assignment={returning}
+        onDone={reload}
+      />
+      <RenewModal
+        open={Boolean(renewing)}
+        onClose={() => setRenewing(null)}
+        assignment={renewing}
         onDone={reload}
       />
     </div>

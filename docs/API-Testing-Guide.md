@@ -724,3 +724,55 @@ curl -X GET "https://localhost:7178/health" -k
 5. **Cleanup Phase**: Return assignments, logout, or reset the database.
 
 This testing guide ensures you can thoroughly test all API endpoints while maintaining proper data flow and avoiding common errors.
+
+---
+
+## Group 2 Endpoints (stock, suppliers, locations, maintenance)
+
+All require a Bearer token. **Reads** are available to all roles; **writes** require Admin or Provider; **deletes** require Admin. Send an `Idempotency-Key` header on POSTs for retry safety.
+
+### Stock operations (InventoryController)
+
+| Method | Route | Body | Notes |
+| --- | --- | --- | --- |
+| POST | `/api/inventory/{id}/receive` | `{ "quantity": 40, "unitCost": 2.5, "supplierId": 1, "reason": "PO#1001" }` | Qty↑ & Available↑; appends `Received` |
+| POST | `/api/inventory/{id}/adjust` | `{ "quantityDelta": -3, "reason": "Breakage" }` | reason required; reject if available < 0 |
+| POST | `/api/inventory/{id}/dispose` | `{ "quantity": 2, "reason": "Expired" }` | ≤ available; qty→0 sets `Disposed` |
+| POST | `/api/inventory/{id}/transfer` | `{ "toLocationId": 2, "reason": "Rebalance" }` | appends `Transferred` |
+| GET | `/api/inventory/{id}/movements` | — | item ledger, newest first |
+| GET | `/api/inventory/movements/recent?pageNumber=1&pageSize=20` | — | global recent (Admin/Provider) |
+| GET | `/api/inventory/reorder` | — | items where available ≤ reorder level |
+
+### Suppliers (`/api/suppliers`) and Locations (`/api/locations`)
+
+Standard CRUD: `GET /` (`?activeOnly=true`), `GET /paged`, `GET /{id}`, `POST /`, `PUT /{id}`, `DELETE /{id}`.
+
+```jsonc
+// POST /api/suppliers
+{ "name": "Acme Medical", "contactName": "Jane", "email": "sales@acme.test", "leadTimeDays": 7 }
+// POST /api/locations
+{ "name": "Central Store", "code": "CS-01", "parentLocationId": null }
+```
+Delete guards: a supplier with linked items → **409**; a location with children or linked items → **409**.
+
+### Assignment lifecycle
+
+| Method | Route | Body |
+| --- | --- | --- |
+| POST | `/api/inventoryassignments/return` | `{ "assignmentId": 3, "returnQuantity": 2, "returnCondition": 1, "returnNotes": "…" }` (partial + condition) |
+| POST | `/api/inventoryassignments/renew` | `{ "assignmentId": 3, "newExpectedReturnDate": "2026-09-30T00:00:00Z", "notes": "…" }` |
+| GET | `/api/inventoryassignments/due-soon?daysAhead=7` | — |
+
+`returnQuantity` omitted returns the full outstanding amount. `returnCondition`: 1 Good, 2 Damaged, 3 Lost, 4 NeedsRepair (Lost reduces owned quantity instead of crediting stock).
+
+### Maintenance (`/api/maintenance`)
+
+| Method | Route | Body |
+| --- | --- | --- |
+| GET | `/api/maintenance/paged` · `/due?daysAhead=30` · `/inventory/{inventoryId}` · `/{id}` | — |
+| POST | `/api/maintenance` | `{ "inventoryId": 7, "maintenanceType": 2, "title": "Annual calibration", "intervalDays": 365, "nextDueAt": "2026-09-10T00:00:00Z" }` |
+| PUT | `/api/maintenance/{id}` | full update incl. `status` |
+| POST | `/api/maintenance/{id}/complete` | `{ "performedAt": "2026-08-21T00:00:00Z", "notes": "OK" }` — recurring rolls `nextDueAt` forward |
+| DELETE | `/api/maintenance/{id}` | — (Admin) |
+
+`maintenanceType`: 1 Inspection, 2 Calibration, 3 Service, 4 Repair, 5 Cleaning. Status is normalized from the due date on read (Scheduled/Due/Overdue) for open schedules.

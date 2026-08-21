@@ -40,7 +40,7 @@ The implementation includes a security/architecture hardening refactor and a Res
 
 **Comprehensive database design and relationship documentation**
 
-- **Table Structures**: Users, Inventories, InventoryAssignments, and IdempotentRequests
+- **Table Structures**: Users, Inventories, InventoryAssignments, StockMovements, Suppliers, Locations, MaintenanceSchedules, and IdempotentRequests
 - **Concurrency Columns**: `ConcurrencyToken` fields on domain entities
 - **Indexes & Performance**: Optimized indexes for common queries and idempotency cleanup
 - **Migration Management**: EF Core migration commands and versioning
@@ -53,7 +53,7 @@ The implementation includes a security/architecture hardening refactor and a Res
 
 **Domain-driven design documentation covering entities, DTOs, options, security abstractions, and business logic**
 
-- **Core Entities**: User, Inventory, InventoryAssignment, IdempotentRequest, and BaseEntity
+- **Core Entities**: User, Inventory, InventoryAssignment, StockMovement, Supplier, Location, MaintenanceSchedule, IdempotentRequest, and BaseEntity
 - **DTOs & Validation**: Request/response models with DataAnnotations and automatic API validation
 - **Result Pattern**: `Result<T>` service outcomes mapped to HTTP status codes by the API layer
 - **Security Abstractions**: `JwtOptions`, `ITokenService`, `IPasswordHasher`, `ISecretClient`
@@ -74,6 +74,16 @@ The implementation includes a security/architecture hardening refactor and a Res
 - **Error Handling**: Centralized `IExceptionHandler` and uniform `ApiResponse` responses
 
 **🎯 Use this when**: You need to understand how data moves through the system.
+
+---
+
+### 6. Feature enhancement change-logs 🧩
+
+- **[Proposed Enhancement](Proposed-Enhancement.md)** — the catalogue of unused backend capability and the Part A / Part B (Group 1 & Group 2) enhancement plan, with implementation status.
+- **[Group 1 Feature Changes](Group1-Feature-Changes.md)** — frontend-only features on the existing backend (barcode lookup, server search, detail pages, who-has-what, tunable alerts, reports, notifications).
+- **[Group 2 Feature Changes](Group2-Feature-Changes.md)** — domain-agnostic backend extensions + UI: stock-movement ledger, receive/restock & reorder, suppliers, locations & transfers, assignment lifecycle extras (partial return, renew, condition), and maintenance/calibration schedules.
+
+**🎯 Use this when**: You need the per-file rationale/benefits of the demo's feature additions.
 
 ---
 

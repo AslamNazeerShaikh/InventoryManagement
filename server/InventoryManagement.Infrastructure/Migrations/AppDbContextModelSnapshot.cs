@@ -138,6 +138,9 @@ namespace InventoryManagement.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("LocationId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime?>("ManufactureDate")
                         .HasColumnType("TEXT");
 
@@ -155,6 +158,12 @@ namespace InventoryManagement.Infrastructure.Migrations
                     b.Property<int>("Quantity")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("ReorderLevel")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ReorderQuantity")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("SerialNumber")
                         .HasMaxLength(50)
                         .HasColumnType("TEXT");
@@ -165,6 +174,9 @@ namespace InventoryManagement.Infrastructure.Migrations
                     b.Property<string>("Supplier")
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
+
+                    b.Property<int?>("SupplierId")
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("TEXT");
@@ -195,6 +207,9 @@ namespace InventoryManagement.Infrastructure.Migrations
                     b.HasIndex("IsDeleted")
                         .HasDatabaseName("IX_Inventories_IsDeleted");
 
+                    b.HasIndex("LocationId")
+                        .HasDatabaseName("IX_Inventories_LocationId");
+
                     b.HasIndex("SerialNumber")
                         .IsUnique()
                         .HasDatabaseName("IX_Inventories_SerialNumber")
@@ -202,6 +217,9 @@ namespace InventoryManagement.Infrastructure.Migrations
 
                     b.HasIndex("Status")
                         .HasDatabaseName("IX_Inventories_Status");
+
+                    b.HasIndex("SupplierId")
+                        .HasDatabaseName("IX_Inventories_SupplierId");
 
                     b.ToTable("Inventories", (string)null);
                 });
@@ -254,12 +272,25 @@ namespace InventoryManagement.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("RenewalCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0);
+
+                    b.Property<int?>("ReturnCondition")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime?>("ReturnDate")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ReturnNotes")
                         .HasMaxLength(1000)
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("ReturnedQuantity")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0);
 
                     b.Property<int?>("ReturnedToUserId")
                         .HasColumnType("INTEGER");
@@ -307,6 +338,339 @@ namespace InventoryManagement.Infrastructure.Migrations
                         .HasDatabaseName("IX_InventoryAssignments_UserId");
 
                     b.ToTable("InventoryAssignments", (string)null);
+                });
+
+            modelBuilder.Entity("InventoryManagement.Domain.Entities.Location", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ConcurrencyToken")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeletedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("ParentLocationId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Locations_Code")
+                        .HasFilter("[Code] IS NOT NULL AND [IsDeleted] = 0");
+
+                    b.HasIndex("IsActive")
+                        .HasDatabaseName("IX_Locations_IsActive");
+
+                    b.HasIndex("ParentLocationId")
+                        .HasDatabaseName("IX_Locations_ParentLocationId");
+
+                    b.ToTable("Locations", (string)null);
+                });
+
+            modelBuilder.Entity("InventoryManagement.Domain.Entities.MaintenanceSchedule", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("ConcurrencyToken")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeletedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("IntervalDays")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("InventoryId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("LastPerformedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("MaintenanceType")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("NextDueAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("PerformedByUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InventoryId")
+                        .HasDatabaseName("IX_MaintenanceSchedules_InventoryId");
+
+                    b.HasIndex("NextDueAt")
+                        .HasDatabaseName("IX_MaintenanceSchedules_NextDueAt");
+
+                    b.HasIndex("PerformedByUserId");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("IX_MaintenanceSchedules_Status");
+
+                    b.ToTable("MaintenanceSchedules", (string)null);
+                });
+
+            modelBuilder.Entity("InventoryManagement.Domain.Entities.StockMovement", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("AssignmentId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("BalanceAfter")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("ConcurrencyToken")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeletedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("FromLocationId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("InventoryId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("MovementType")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("PerformedByUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("QuantityChange")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("SupplierId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ToLocationId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal?>("UnitCost")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssignmentId")
+                        .HasDatabaseName("IX_StockMovements_AssignmentId");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("IX_StockMovements_CreatedAt");
+
+                    b.HasIndex("FromLocationId");
+
+                    b.HasIndex("InventoryId")
+                        .HasDatabaseName("IX_StockMovements_InventoryId");
+
+                    b.HasIndex("MovementType")
+                        .HasDatabaseName("IX_StockMovements_MovementType");
+
+                    b.HasIndex("PerformedByUserId")
+                        .HasDatabaseName("IX_StockMovements_PerformedByUserId");
+
+                    b.HasIndex("SupplierId");
+
+                    b.HasIndex("ToLocationId");
+
+                    b.ToTable("StockMovements", (string)null);
+                });
+
+            modelBuilder.Entity("InventoryManagement.Domain.Entities.Supplier", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ConcurrencyToken")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ContactName")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeletedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("LeadTimeDays")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Website")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive")
+                        .HasDatabaseName("IX_Suppliers_IsActive");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Suppliers_Name")
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("Suppliers", (string)null);
                 });
 
             modelBuilder.Entity("InventoryManagement.Domain.Entities.User", b =>
@@ -402,7 +766,21 @@ namespace InventoryManagement.Infrastructure.Migrations
                         .HasForeignKey("CreatedByUserId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("InventoryManagement.Domain.Entities.Location", "LocationEntity")
+                        .WithMany("Inventories")
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("InventoryManagement.Domain.Entities.Supplier", "SupplierEntity")
+                        .WithMany("Inventories")
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("CreatedByUser");
+
+                    b.Navigation("LocationEntity");
+
+                    b.Navigation("SupplierEntity");
                 });
 
             modelBuilder.Entity("InventoryManagement.Domain.Entities.InventoryAssignment", b =>
@@ -438,9 +816,99 @@ namespace InventoryManagement.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("InventoryManagement.Domain.Entities.Location", b =>
+                {
+                    b.HasOne("InventoryManagement.Domain.Entities.Location", "ParentLocation")
+                        .WithMany("ChildLocations")
+                        .HasForeignKey("ParentLocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("ParentLocation");
+                });
+
+            modelBuilder.Entity("InventoryManagement.Domain.Entities.MaintenanceSchedule", b =>
+                {
+                    b.HasOne("InventoryManagement.Domain.Entities.Inventory", "Inventory")
+                        .WithMany("MaintenanceSchedules")
+                        .HasForeignKey("InventoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("InventoryManagement.Domain.Entities.User", "PerformedByUser")
+                        .WithMany()
+                        .HasForeignKey("PerformedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Inventory");
+
+                    b.Navigation("PerformedByUser");
+                });
+
+            modelBuilder.Entity("InventoryManagement.Domain.Entities.StockMovement", b =>
+                {
+                    b.HasOne("InventoryManagement.Domain.Entities.InventoryAssignment", "Assignment")
+                        .WithMany()
+                        .HasForeignKey("AssignmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("InventoryManagement.Domain.Entities.Location", "FromLocation")
+                        .WithMany()
+                        .HasForeignKey("FromLocationId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("InventoryManagement.Domain.Entities.Inventory", "Inventory")
+                        .WithMany("StockMovements")
+                        .HasForeignKey("InventoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("InventoryManagement.Domain.Entities.User", "PerformedByUser")
+                        .WithMany()
+                        .HasForeignKey("PerformedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("InventoryManagement.Domain.Entities.Supplier", "Supplier")
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("InventoryManagement.Domain.Entities.Location", "ToLocation")
+                        .WithMany()
+                        .HasForeignKey("ToLocationId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Assignment");
+
+                    b.Navigation("FromLocation");
+
+                    b.Navigation("Inventory");
+
+                    b.Navigation("PerformedByUser");
+
+                    b.Navigation("Supplier");
+
+                    b.Navigation("ToLocation");
+                });
+
             modelBuilder.Entity("InventoryManagement.Domain.Entities.Inventory", b =>
                 {
                     b.Navigation("Assignments");
+
+                    b.Navigation("MaintenanceSchedules");
+
+                    b.Navigation("StockMovements");
+                });
+
+            modelBuilder.Entity("InventoryManagement.Domain.Entities.Location", b =>
+                {
+                    b.Navigation("ChildLocations");
+
+                    b.Navigation("Inventories");
+                });
+
+            modelBuilder.Entity("InventoryManagement.Domain.Entities.Supplier", b =>
+                {
+                    b.Navigation("Inventories");
                 });
 
             modelBuilder.Entity("InventoryManagement.Domain.Entities.User", b =>
