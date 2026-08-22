@@ -9,6 +9,9 @@ public class UserDto
     /// <summary>User identifier.</summary>
     public int Id { get; set; }
 
+    /// <summary>Owning tenant identifier (multi-tenant isolation boundary).</summary>
+    public Guid TenantId { get; set; }
+
     /// <summary>Display name.</summary>
     public string Name { get; set; } = string.Empty;
 

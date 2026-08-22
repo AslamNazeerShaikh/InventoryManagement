@@ -50,6 +50,7 @@ public sealed class TokenService : ITokenService
         {
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new(AuthConstants.Claims.Tenant, user.TenantId.ToString()),
             new(AuthConstants.Claims.UserId, user.Id.ToString()),
             new(AuthConstants.Claims.Email, user.Email),
             new(AuthConstants.Claims.Name, user.Name),

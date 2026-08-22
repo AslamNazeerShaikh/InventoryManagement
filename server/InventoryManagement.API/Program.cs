@@ -90,6 +90,9 @@ public class Program
         app.UseAuthentication();
         app.UseAuthorization();
 
+        // Resolve the ambient tenant from the authenticated principal before controllers/persistence.
+        app.UseMiddleware<TenantResolutionMiddleware>();
+
         // Idempotency runs AFTER authentication so anonymous callers cannot populate the store.
         app.UseMiddleware<IdempotencyMiddleware>();
 

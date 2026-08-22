@@ -28,12 +28,12 @@ public class LocationConfiguration : IEntityTypeConfiguration<Location>
 
         builder.Property(l => l.DeletedBy).HasMaxLength(100);
 
-        // Unique location code among non-deleted rows that actually have a code.
+        // Provider-agnostic tenant-scoped code lookup. Uniqueness "when present" is enforced
+        // per-tenant in the application layer (LocationService.IsCodeExistsAsync); a filtered unique
+        // index would require provider-specific raw SQL, avoided for cross-provider portability.
         builder
-            .HasIndex(l => l.Code)
-            .IsUnique()
-            .HasDatabaseName("IX_Locations_Code")
-            .HasFilter("[Code] IS NOT NULL AND [IsDeleted] = 0");
+            .HasIndex(l => new { l.TenantId, l.Code })
+            .HasDatabaseName("IX_Locations_TenantId_Code");
 
         builder.HasIndex(l => l.ParentLocationId).HasDatabaseName("IX_Locations_ParentLocationId");
 
@@ -47,6 +47,7 @@ public class LocationConfiguration : IEntityTypeConfiguration<Location>
             .HasForeignKey(l => l.ParentLocationId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasQueryFilter(l => !l.IsDeleted);
+        // The tenant + soft-delete global query filter is applied centrally in
+        // AppDbContext.OnModelCreating (the composite tenant index above serves tenant scans).
     }
 }

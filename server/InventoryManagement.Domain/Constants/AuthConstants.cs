@@ -17,6 +17,9 @@ public static class AuthConstants
         public const string Role = "role";
         public const string IsAdmin = "is_admin";
         public const string IsProvider = "is_provider";
+
+        /// <summary>Owning tenant of the authenticated user; drives request-scoped tenant isolation.</summary>
+        public const string Tenant = "tenant";
     }
 
     public static class Policies

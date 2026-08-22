@@ -29,7 +29,7 @@ public class StockMovementConfiguration : IEntityTypeConfiguration<StockMovement
 
         builder.Property(m => m.Notes).HasMaxLength(1000);
 
-        builder.Property(m => m.UnitCost).HasColumnType("decimal(18,2)");
+        builder.Property(m => m.UnitCost).HasPrecision(18, 2);
 
         builder.Property(m => m.CreatedAt).IsRequired();
 
@@ -90,6 +90,8 @@ public class StockMovementConfiguration : IEntityTypeConfiguration<StockMovement
             .HasForeignKey(m => m.SupplierId)
             .OnDelete(DeleteBehavior.SetNull);
 
-        builder.HasQueryFilter(m => !m.IsDeleted);
+        // Tenant isolation index; the tenant + soft-delete global filter is applied centrally in
+        // AppDbContext.OnModelCreating for every BaseEntity.
+        builder.HasIndex(m => m.TenantId).HasDatabaseName("IX_StockMovements_TenantId");
     }
 }

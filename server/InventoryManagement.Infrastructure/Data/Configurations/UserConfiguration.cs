@@ -55,7 +55,9 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             .HasForeignKey(i => i.CreatedByUserId)
             .OnDelete(DeleteBehavior.SetNull);
 
-        // Query filters for soft delete
-        builder.HasQueryFilter(u => !u.IsDeleted);
+        // Tenant isolation index; the tenant + soft-delete global filter is applied centrally in
+        // AppDbContext.OnModelCreating. Email stays globally unique so pre-authentication login can
+        // locate the user across tenants before the tenant is known.
+        builder.HasIndex(u => u.TenantId).HasDatabaseName("IX_Users_TenantId");
     }
 }

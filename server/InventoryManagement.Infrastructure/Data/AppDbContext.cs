@@ -1,4 +1,6 @@
+using System.Reflection;
 using InventoryManagement.Domain.Common;
+using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.Entities;
 using InventoryManagement.Domain.Security;
 using Microsoft.EntityFrameworkCore;
@@ -13,17 +15,35 @@ namespace InventoryManagement.Infrastructure.Data;
 public class AppDbContext : DbContext
 {
     private readonly IDateTimeProvider? _clock;
+    private readonly ITenantContext? _tenant;
 
     /// <summary>Creates the context with the supplied options (design-time / testing).</summary>
     public AppDbContext(DbContextOptions<AppDbContext> options)
         : base(options) { }
 
-    /// <summary>Creates the context with an injected clock for deterministic audit timestamps.</summary>
-    public AppDbContext(DbContextOptions<AppDbContext> options, IDateTimeProvider clock)
+    /// <summary>
+    /// Creates the context with an injected clock and tenant context (runtime DI). The container
+    /// selects this greediest satisfiable constructor, so production always receives both; the
+    /// options-only constructor above remains for design-time tooling and tests.
+    /// </summary>
+    public AppDbContext(
+        DbContextOptions<AppDbContext> options,
+        IDateTimeProvider clock,
+        ITenantContext tenant
+    )
         : base(options)
     {
         _clock = clock;
+        _tenant = tenant;
     }
+
+    /// <summary>
+    /// Tenant the context is currently scoped to. Referenced by the global query filters (EF Core
+    /// evaluates it as a per-request query parameter, never baking it into the cached model) and by
+    /// <see cref="ApplyAuditAndConcurrency"/> when stamping new rows. Falls back to the default
+    /// tenant for design-time/seed/test contexts that never resolve a tenant.
+    /// </summary>
+    public Guid CurrentTenantId => _tenant?.TenantId ?? TenantConstants.DefaultTenantId;
 
     /// <summary>Users table.</summary>
     public DbSet<User> Users => Set<User>();
@@ -56,19 +76,44 @@ public class AppDbContext : DbContext
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
 
-        // Provider-agnostic optimistic concurrency: mark every BaseEntity.ConcurrencyToken as a
-        // concurrency token so EF includes it in UPDATE/DELETE predicates.
+        // Provider-agnostic cross-cutting model rules for every BaseEntity: an optimistic concurrency
+        // token plus a single global query filter enforcing tenant isolation and soft-delete.
+        // Centralizing the filter keeps it identical across all entities (avoiding required-navigation
+        // filter warnings) and removes per-configuration duplication.
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
-            if (typeof(BaseEntity).IsAssignableFrom(entityType.ClrType))
+            if (!typeof(BaseEntity).IsAssignableFrom(entityType.ClrType))
             {
-                modelBuilder
-                    .Entity(entityType.ClrType)
-                    .Property(nameof(BaseEntity.ConcurrencyToken))
-                    .IsConcurrencyToken();
+                continue;
             }
+
+            modelBuilder
+                .Entity(entityType.ClrType)
+                .Property(nameof(BaseEntity.ConcurrencyToken))
+                .IsConcurrencyToken();
+
+            SetGlobalQueryFilterMethod
+                .MakeGenericMethod(entityType.ClrType)
+                .Invoke(this, new object[] { modelBuilder });
         }
     }
+
+    private static readonly MethodInfo SetGlobalQueryFilterMethod = typeof(AppDbContext).GetMethod(
+        nameof(SetTenantAndSoftDeleteFilter),
+        BindingFlags.Instance | BindingFlags.NonPublic
+    )!;
+
+    /// <summary>
+    /// Applies the combined tenant + soft-delete global query filter for <typeparamref name="TEntity"/>.
+    /// <see cref="CurrentTenantId"/> is a context instance member, so EF Core translates it into a
+    /// per-request query parameter (the officially supported multi-tenant pattern) rather than baking
+    /// a value into the cached model. Uses only LINQ, so it is fully provider-agnostic.
+    /// </summary>
+    private void SetTenantAndSoftDeleteFilter<TEntity>(ModelBuilder modelBuilder)
+        where TEntity : BaseEntity =>
+        modelBuilder
+            .Entity<TEntity>()
+            .HasQueryFilter(e => e.TenantId == CurrentTenantId && !e.IsDeleted);
 
     /// <inheritdoc />
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -99,6 +144,11 @@ public class AppDbContext : DbContext
                 case EntityState.Added:
                     entry.Entity.CreatedAt = now;
                     entry.Entity.ConcurrencyToken = Guid.NewGuid();
+                    // Stamp the owning tenant on insert unless the caller set one explicitly.
+                    if (entry.Entity.TenantId == Guid.Empty)
+                    {
+                        entry.Entity.TenantId = CurrentTenantId;
+                    }
                     break;
                 case EntityState.Modified:
                     entry.Entity.UpdatedAt = now;

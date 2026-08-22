@@ -1,10 +1,12 @@
 using System.Security.Cryptography;
+using InventoryManagement.Domain.Common;
 using InventoryManagement.Domain.Entities;
 using InventoryManagement.Domain.Enums;
 using InventoryManagement.Domain.Interfaces;
 using InventoryManagement.Domain.Security;
 using InventoryManagement.Infrastructure.Data;
 using InventoryManagement.Infrastructure.Idempotency;
+using InventoryManagement.Infrastructure.Multitenancy;
 using InventoryManagement.Infrastructure.Repositories;
 using InventoryManagement.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
@@ -36,6 +38,10 @@ public static class ServiceCollectionExtensions
             );
 
         services.AddDbContext<AppDbContext>(options => options.UseSqlite(connectionString));
+
+        // Ambient multi-tenancy (scoped): resolved per request by the presentation layer and consumed
+        // by AppDbContext to filter every query to the caller's tenant and stamp it on insert.
+        services.AddScoped<ITenantContext, TenantContext>();
 
         // System services.
         services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
@@ -89,7 +95,8 @@ public static class ServiceCollectionExtensions
 
         if (
             await context
-                .Users.AnyAsync(u => u.Email == adminEmail, cancellationToken)
+                .Users.IgnoreQueryFilters()
+                .AnyAsync(u => u.Email == adminEmail && !u.IsDeleted, cancellationToken)
                 .ConfigureAwait(false)
         )
         {
