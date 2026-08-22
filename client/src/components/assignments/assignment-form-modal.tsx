@@ -180,7 +180,7 @@ export function AssignmentFormModal({
           {isEdit ? (
             <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
               <p className="text-sm font-medium text-white">
-                {initial?.equipmentName}
+                {initial?.itemName}
               </p>
               <p className="text-xs text-slate-500">
                 Assigned to {initial?.userName}
@@ -199,7 +199,7 @@ export function AssignmentFormModal({
                   <option value="">Select item…</option>
                   {inventories.map((i) => (
                     <option key={i.id} value={i.id}>
-                      {i.equipmentName} ({i.availableQuantity} available)
+                      {i.name} ({i.availableQuantity} available)
                     </option>
                   ))}
                 </Select>

@@ -36,7 +36,10 @@ public sealed class MaintenanceServiceTests : IDisposable
             new StockMovementRepository(_context),
             new SupplierRepository(_context),
             new LocationRepository(_context),
-            new MaintenanceScheduleRepository(_context)
+            new MaintenanceScheduleRepository(_context),
+            new RoleRepository(_context),
+            new PermissionRepository(_context),
+            new UserRoleRepository(_context)
         );
         _service = new MaintenanceService(unitOfWork, NullLogger<MaintenanceService>.Instance);
     }
@@ -123,7 +126,7 @@ public sealed class MaintenanceServiceTests : IDisposable
         _context.Users.Add(new User { Name = "Op", Email = "op@test.com", PasswordHash = "x" });
         var item = new Inventory
         {
-            EquipmentName = "BP Monitor",
+            Name = "BP Monitor",
             Quantity = 1,
             AvailableQuantity = 1,
             Status = InventoryStatus.Available,

@@ -29,20 +29,19 @@ public interface IUserService
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>Updates a user's profile.</summary>
+    /// <summary>
+    /// Updates a user's profile. When <paramref name="allowPrivilegedFields"/> is <c>false</c> (a
+    /// self-service profile edit) the user's role membership and active status are left unchanged.
+    /// </summary>
     Task<Result<UserDto>> UpdateUserAsync(
         int id,
         UpdateUserDto updateUserDto,
+        bool allowPrivilegedFields,
         CancellationToken cancellationToken = default
     );
 
     /// <summary>Soft-deletes a user.</summary>
     Task<Result<bool>> DeleteUserAsync(int id, CancellationToken cancellationToken = default);
-
-    /// <summary>Lists nurse-practitioner users.</summary>
-    Task<Result<IEnumerable<UserDto>>> GetNursePractitionersAsync(
-        CancellationToken cancellationToken = default
-    );
 
     /// <summary>Lists active users.</summary>
     Task<Result<IEnumerable<UserDto>>> GetActiveUsersAsync(

@@ -6,8 +6,8 @@ import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import { useAsync } from "@/lib/use-async";
 import { useAuth } from "@/lib/auth-context";
-import { UserRole, type UserDto } from "@/lib/types";
-import { cn, formatDate, formatRelativeTime, roleLabels } from "@/lib/utils";
+import { UserDto } from "@/lib/types";
+import { cn, formatDate, formatRelativeTime } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -53,11 +53,16 @@ export default function UsersPage() {
         [u.name, u.email].some((f) => f.toLowerCase().includes(term)),
       );
     }
-    if (role !== "all") list = list.filter((u) => u.role === Number(role));
+    if (role !== "all") list = list.filter((u) => u.roles.includes(role));
     if (active !== "all")
       list = list.filter((u) => u.isActive === (active === "active"));
     return list;
   }, [data, search, role, active]);
+
+  const roleOptions = useMemo(
+    () => Array.from(new Set((data ?? []).flatMap((u) => u.roles))).sort(),
+    [data],
+  );
 
   useEffect(() => setPage(1), [search, role, active]);
 
@@ -127,13 +132,11 @@ export default function UsersPage() {
               onChange={(e) => setRole(e.target.value)}
             >
               <option value="all">All roles</option>
-              {Object.values(UserRole)
-                .filter((v): v is number => typeof v === "number")
-                .map((v) => (
-                  <option key={v} value={v}>
-                    {roleLabels[v as UserRole]}
-                  </option>
-                ))}
+              {roleOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
             </Select>
             <Select
               className="min-w-[8rem]"
@@ -200,7 +203,11 @@ export default function UsersPage() {
                       </div>
                     </TD>
                     <TD>
-                      <RoleBadge role={u.role} />
+                      <div className="flex flex-wrap gap-1">
+                        {u.roles.map((r) => (
+                          <RoleBadge key={r} role={r} />
+                        ))}
+                      </div>
                     </TD>
                     <TD>
                       <Badge tone={u.isActive ? "success" : "neutral"} dot>

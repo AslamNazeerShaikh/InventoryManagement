@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using InventoryManagement.Domain.Enums;
 
 namespace InventoryManagement.Domain.DTOs;
 
@@ -18,14 +17,11 @@ public class UserDto
     /// <summary>Login email.</summary>
     public string Email { get; set; } = string.Empty;
 
-    /// <summary>Whether the user has administrative privileges.</summary>
-    public bool IsAdmin { get; set; }
+    /// <summary>Names of the roles assigned to the user.</summary>
+    public List<string> Roles { get; set; } = new();
 
-    /// <summary>Whether the user is a clinical provider.</summary>
-    public bool IsProvider { get; set; }
-
-    /// <summary>Coarse-grained role.</summary>
-    public UserRole Role { get; set; }
+    /// <summary>Distinct permission codes granted via the user's roles (drives UI gating).</summary>
+    public List<string> Permissions { get; set; } = new();
 
     /// <summary>Whether the account is active.</summary>
     public bool IsActive { get; set; }
@@ -56,15 +52,8 @@ public class CreateUserDto
     [StringLength(128, MinimumLength = 8)]
     public string Password { get; set; } = string.Empty;
 
-    /// <summary>Whether to grant administrative privileges.</summary>
-    public bool IsAdmin { get; set; }
-
-    /// <summary>Whether the user is a clinical provider.</summary>
-    public bool IsProvider { get; set; }
-
-    /// <summary>Assigned role.</summary>
-    [EnumDataType(typeof(UserRole))]
-    public UserRole Role { get; set; } = UserRole.Staff;
+    /// <summary>Identifiers of the roles to assign to the new user (within the caller's tenant).</summary>
+    public List<int> RoleIds { get; set; } = new();
 }
 
 /// <summary>Payload for updating an existing user's profile.</summary>
@@ -81,15 +70,8 @@ public class UpdateUserDto
     [StringLength(256)]
     public string Email { get; set; } = string.Empty;
 
-    /// <summary>Whether the user has administrative privileges.</summary>
-    public bool IsAdmin { get; set; }
-
-    /// <summary>Whether the user is a clinical provider.</summary>
-    public bool IsProvider { get; set; }
-
-    /// <summary>Assigned role.</summary>
-    [EnumDataType(typeof(UserRole))]
-    public UserRole Role { get; set; }
+    /// <summary>Identifiers of the roles the user should have (replaces the current set). <c>null</c> leaves role membership unchanged (e.g. a self-service profile update).</summary>
+    public List<int>? RoleIds { get; set; }
 
     /// <summary>Whether the account is active.</summary>
     public bool IsActive { get; set; }

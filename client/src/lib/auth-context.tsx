@@ -19,17 +19,22 @@ import {
   setSession,
 } from "@/lib/api";
 import { STORAGE_KEYS } from "@/lib/config";
+import { PERMISSIONS } from "@/lib/permissions";
 import type { UserDto } from "@/lib/types";
 
 interface AuthContextValue {
   user: UserDto | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  /** All permission codes granted to the signed-in user. */
+  permissions: string[];
+  /** Whether the user holds a specific permission code. */
+  hasPermission: (code: string) => boolean;
   isAdmin: boolean;
   isProvider: boolean;
-  /** Admin or Provider — may manage inventory & assignments. */
+  /** Convenience: may manage inventory (elevated operator). */
   canManage: boolean;
-  /** Admin only — may manage users. */
+  /** May manage users. */
   canManageUsers: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -86,20 +91,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const permissionSet = useMemo(() => new Set(user?.permissions ?? []), [user]);
+  const hasPermission = useCallback(
+    (code: string) => permissionSet.has(code),
+    [permissionSet],
+  );
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       isAuthenticated: Boolean(user),
       isLoading,
-      isAdmin: Boolean(user?.isAdmin),
-      isProvider: Boolean(user?.isProvider),
-      canManage: Boolean(user?.isAdmin || user?.isProvider),
-      canManageUsers: Boolean(user?.isAdmin),
+      permissions: user?.permissions ?? [],
+      hasPermission,
+      isAdmin: permissionSet.has(PERMISSIONS.users.manage),
+      isProvider: permissionSet.has(PERMISSIONS.inventory.manage),
+      canManage: permissionSet.has(PERMISSIONS.inventory.manage),
+      canManageUsers: permissionSet.has(PERMISSIONS.users.manage),
       login,
       logout,
       applyUser,
     }),
-    [user, isLoading, login, logout, applyUser],
+    [user, isLoading, login, logout, applyUser, hasPermission, permissionSet],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

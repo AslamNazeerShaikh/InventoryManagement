@@ -1,5 +1,4 @@
 using InventoryManagement.Domain.Common;
-using InventoryManagement.Domain.Enums;
 
 namespace InventoryManagement.Domain.Entities;
 
@@ -15,17 +14,8 @@ public class User : BaseEntity
     /// <summary>Unique login email (case-sensitive as stored; compared verbatim).</summary>
     public string Email { get; set; } = string.Empty;
 
-    /// <summary>BCrypt hash of the user's password. Never store or return the plaintext.</summary>
+    /// <summary>PBKDF2 hash of the user's password. Never store or return the plaintext.</summary>
     public string PasswordHash { get; set; } = string.Empty;
-
-    /// <summary>Grants administrative privileges (full access).</summary>
-    public bool IsAdmin { get; set; } = false;
-
-    /// <summary>Marks the user as a clinical provider (elevated, non-admin privileges).</summary>
-    public bool IsProvider { get; set; } = false;
-
-    /// <summary>Coarse-grained role used for role-based policies.</summary>
-    public UserRole Role { get; set; } = UserRole.Staff;
 
     /// <summary>When <c>false</c> the account is disabled and cannot authenticate.</summary>
     public bool IsActive { get; set; } = true;
@@ -49,4 +39,7 @@ public class User : BaseEntity
 
     /// <summary>Inventory items created by this user.</summary>
     public virtual ICollection<Inventory> CreatedInventories { get; set; } = new List<Inventory>();
+
+    /// <summary>Role memberships that determine this user's effective permissions.</summary>
+    public virtual ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
 }

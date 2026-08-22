@@ -24,7 +24,10 @@ public sealed class UnitOfWork : IUnitOfWork
         IStockMovementRepository stockMovements,
         ISupplierRepository suppliers,
         ILocationRepository locations,
-        IMaintenanceScheduleRepository maintenanceSchedules
+        IMaintenanceScheduleRepository maintenanceSchedules,
+        IRoleRepository roles,
+        IPermissionRepository permissions,
+        IUserRoleRepository userRoles
     )
     {
         _dbContext = dbContext;
@@ -35,6 +38,9 @@ public sealed class UnitOfWork : IUnitOfWork
         Suppliers = suppliers;
         Locations = locations;
         MaintenanceSchedules = maintenanceSchedules;
+        Roles = roles;
+        Permissions = permissions;
+        UserRoles = userRoles;
     }
 
     /// <inheritdoc />
@@ -57,6 +63,15 @@ public sealed class UnitOfWork : IUnitOfWork
 
     /// <inheritdoc />
     public IMaintenanceScheduleRepository MaintenanceSchedules { get; }
+
+    /// <inheritdoc />
+    public IRoleRepository Roles { get; }
+
+    /// <inheritdoc />
+    public IPermissionRepository Permissions { get; }
+
+    /// <inheritdoc />
+    public IUserRoleRepository UserRoles { get; }
 
     /// <inheritdoc />
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

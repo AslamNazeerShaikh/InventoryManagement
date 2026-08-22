@@ -37,7 +37,10 @@ public sealed class InventoryAssignmentServiceTests : IDisposable
             new StockMovementRepository(_context),
             new SupplierRepository(_context),
             new LocationRepository(_context),
-            new MaintenanceScheduleRepository(_context)
+            new MaintenanceScheduleRepository(_context),
+            new RoleRepository(_context),
+            new PermissionRepository(_context),
+            new UserRoleRepository(_context)
         );
         _service = new InventoryAssignmentService(
             unitOfWork,
@@ -173,7 +176,7 @@ public sealed class InventoryAssignmentServiceTests : IDisposable
         var user = new User { Name = "Op", Email = "op@test.com", PasswordHash = "x" };
         var inventory = new Inventory
         {
-            EquipmentName = "Monitor",
+            Name = "Monitor",
             Quantity = 5,
             AvailableQuantity = 3,
             Status = InventoryStatus.Available,

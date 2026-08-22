@@ -1,4 +1,6 @@
 using InventoryManagement.API.Infrastructure;
+using InventoryManagement.API.Infrastructure.Authorization;
+using InventoryManagement.Domain.Authorization;
 using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.DTOs;
 using InventoryManagement.Domain.Interfaces;
@@ -12,7 +14,7 @@ namespace InventoryManagement.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
-[Authorize(Policy = AuthConstants.Policies.AllRoles)]
+[HasPermission(Permissions.Locations.Read)]
 public class LocationsController : ApiControllerBase
 {
     private readonly ILocationService _locationService;
@@ -47,7 +49,7 @@ public class LocationsController : ApiControllerBase
 
     /// <summary>Creates a location (Admin or Provider).</summary>
     [HttpPost]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Locations.Manage)]
     public async Task<ActionResult<ApiResponse<LocationDto>>> CreateLocation(
         [FromBody] CreateLocationDto createDto,
         CancellationToken cancellationToken
@@ -67,7 +69,7 @@ public class LocationsController : ApiControllerBase
 
     /// <summary>Updates a location (Admin or Provider).</summary>
     [HttpPut("{id:int}")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Locations.Manage)]
     public async Task<ActionResult<ApiResponse<LocationDto>>> UpdateLocation(
         int id,
         [FromBody] UpdateLocationDto updateDto,
@@ -76,7 +78,7 @@ public class LocationsController : ApiControllerBase
 
     /// <summary>Deletes a location with no children or linked items (Admin only).</summary>
     [HttpDelete("{id:int}")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOnly)]
+    [HasPermission(Permissions.Locations.Manage)]
     public async Task<ActionResult<ApiResponse<bool>>> DeleteLocation(
         int id,
         CancellationToken cancellationToken

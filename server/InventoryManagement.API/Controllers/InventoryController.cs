@@ -1,4 +1,6 @@
 using InventoryManagement.API.Infrastructure;
+using InventoryManagement.API.Infrastructure.Authorization;
+using InventoryManagement.Domain.Authorization;
 using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.DTOs;
 using InventoryManagement.Domain.Interfaces;
@@ -12,7 +14,7 @@ namespace InventoryManagement.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
-[Authorize(Policy = AuthConstants.Policies.AllRoles)]
+[HasPermission(Permissions.Inventory.Read)]
 public class InventoryController : ApiControllerBase
 {
     private readonly IInventoryService _inventoryService;
@@ -117,7 +119,7 @@ public class InventoryController : ApiControllerBase
 
     /// <summary>Gets a page of recent stock movements across all items (Admin or Provider).</summary>
     [HttpGet("movements/recent")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Inventory.Manage)]
     public async Task<ActionResult<ApiResponse<PagedResult<StockMovementDto>>>> GetRecentMovements(
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20,
@@ -138,7 +140,7 @@ public class InventoryController : ApiControllerBase
 
     /// <summary>Creates a new inventory item (Admin or Provider).</summary>
     [HttpPost]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Inventory.Manage)]
     public async Task<ActionResult<ApiResponse<InventoryDto>>> CreateInventory(
         [FromBody] CreateInventoryDto createInventoryDto,
         CancellationToken cancellationToken
@@ -167,7 +169,7 @@ public class InventoryController : ApiControllerBase
 
     /// <summary>Updates an inventory item (Admin or Provider).</summary>
     [HttpPut("{id:int}")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Inventory.Manage)]
     public async Task<ActionResult<ApiResponse<InventoryDto>>> UpdateInventory(
         int id,
         [FromBody] UpdateInventoryDto updateInventoryDto,
@@ -179,7 +181,7 @@ public class InventoryController : ApiControllerBase
 
     /// <summary>Deletes an inventory item (Admin only).</summary>
     [HttpDelete("{id:int}")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOnly)]
+    [HasPermission(Permissions.Inventory.Delete)]
     public async Task<ActionResult<ApiResponse<bool>>> DeleteInventory(
         int id,
         CancellationToken cancellationToken
@@ -187,7 +189,7 @@ public class InventoryController : ApiControllerBase
 
     /// <summary>Receives/restocks stock into an item (Admin or Provider).</summary>
     [HttpPost("{id:int}/receive")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Stock.Manage)]
     public async Task<ActionResult<ApiResponse<InventoryDto>>> ReceiveStock(
         int id,
         [FromBody] ReceiveStockDto receiveDto,
@@ -206,7 +208,7 @@ public class InventoryController : ApiControllerBase
 
     /// <summary>Adjusts an item's counts up or down with a reason (Admin or Provider).</summary>
     [HttpPost("{id:int}/adjust")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Stock.Manage)]
     public async Task<ActionResult<ApiResponse<InventoryDto>>> AdjustStock(
         int id,
         [FromBody] AdjustStockDto adjustDto,
@@ -225,7 +227,7 @@ public class InventoryController : ApiControllerBase
 
     /// <summary>Disposes of available stock (Admin or Provider).</summary>
     [HttpPost("{id:int}/dispose")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Stock.Manage)]
     public async Task<ActionResult<ApiResponse<InventoryDto>>> DisposeStock(
         int id,
         [FromBody] DisposeStockDto disposeDto,
@@ -244,7 +246,7 @@ public class InventoryController : ApiControllerBase
 
     /// <summary>Transfers an item to a different managed location (Admin or Provider).</summary>
     [HttpPost("{id:int}/transfer")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Stock.Manage)]
     public async Task<ActionResult<ApiResponse<InventoryDto>>> TransferStock(
         int id,
         [FromBody] TransferStockDto transferDto,

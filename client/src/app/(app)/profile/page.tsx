@@ -46,9 +46,7 @@ export default function ProfilePage() {
       const updated = await api.users.update(user!.id, {
         name: name.trim(),
         email: email.trim(),
-        role: user!.role,
-        isAdmin: user!.isAdmin,
-        isProvider: user!.isProvider,
+        roleIds: null,
         isActive: user!.isActive,
       });
       applyUser(updated);
@@ -196,9 +194,9 @@ export default function ProfilePage() {
               <p className="text-sm text-slate-400">{user.email}</p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-2">
-              <RoleBadge role={user.role} />
-              {user.isAdmin && <Badge tone="violet">Admin</Badge>}
-              {user.isProvider && <Badge tone="brand">Provider</Badge>}
+              {user.roles.map((r) => (
+                <RoleBadge key={r} role={r} />
+              ))}
               <Badge tone={user.isActive ? "success" : "neutral"} dot>
                 {user.isActive ? "Active" : "Inactive"}
               </Badge>

@@ -24,7 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 
 interface Draft {
-  equipmentName: string;
+  name: string;
   description: string;
   category: string;
   brand: string;
@@ -47,7 +47,7 @@ interface Draft {
 
 function emptyDraft(): Draft {
   return {
-    equipmentName: "",
+    name: "",
     description: "",
     category: "",
     brand: "",
@@ -71,7 +71,7 @@ function emptyDraft(): Draft {
 
 function fromDto(dto: InventoryDto): Draft {
   return {
-    equipmentName: dto.equipmentName,
+    name: dto.name,
     description: dto.description ?? "",
     category: dto.category ?? "",
     brand: dto.brand ?? "",
@@ -140,8 +140,8 @@ export function InventoryFormModal({
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     const quantity = Number(draft.quantity);
-    if (!draft.equipmentName.trim()) {
-      toast.error("Equipment name is required");
+    if (!draft.name.trim()) {
+      toast.error("Item name is required");
       return;
     }
     if (Number.isNaN(quantity) || quantity < (isEdit ? 0 : 1)) {
@@ -150,7 +150,7 @@ export function InventoryFormModal({
     }
 
     const base: CreateInventoryDto = {
-      equipmentName: draft.equipmentName.trim(),
+      name: draft.name.trim(),
       description: draft.description.trim() || null,
       category: draft.category.trim() || null,
       brand: draft.brand.trim() || null,
@@ -182,12 +182,12 @@ export function InventoryFormModal({
         const payload: UpdateInventoryDto = { ...base, status: draft.status };
         await api.inventory.update(initial.id, payload, key);
         toast.success("Inventory updated", {
-          description: `${base.equipmentName} was saved.`,
+          description: `${base.name} was saved.`,
         });
       } else {
         await api.inventory.create(base, key);
         toast.success("Inventory added", {
-          description: `${base.equipmentName} is now in stock.`,
+          description: `${base.name} is now in stock.`,
         });
       }
       onSaved();
@@ -212,7 +212,7 @@ export function InventoryFormModal({
       description={
         isEdit
           ? "Update the details for this equipment."
-          : "Register new medical equipment into the catalogue."
+          : "Register a new item into the catalogue."
       }
       footer={
         <>
@@ -227,10 +227,10 @@ export function InventoryFormModal({
     >
       <form id="inventory-form" onSubmit={onSubmit} className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Equipment name" required className="sm:col-span-2">
+          <Field label="Item name" required className="sm:col-span-2">
             <Input
-              value={draft.equipmentName}
-              onChange={set("equipmentName")}
+              value={draft.name}
+              onChange={set("name")}
               placeholder="e.g. Digital Thermometer"
               required
             />

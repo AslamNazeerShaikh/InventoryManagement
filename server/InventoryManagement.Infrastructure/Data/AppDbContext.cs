@@ -66,6 +66,18 @@ public class AppDbContext : DbContext
     /// <summary>Maintenance/calibration schedules table.</summary>
     public DbSet<MaintenanceSchedule> MaintenanceSchedules => Set<MaintenanceSchedule>();
 
+    /// <summary>Dynamic, tenant-scoped roles table.</summary>
+    public DbSet<Role> Roles => Set<Role>();
+
+    /// <summary>Tenant permission-catalog table.</summary>
+    public DbSet<Permission> Permissions => Set<Permission>();
+
+    /// <summary>Role → permission grants table.</summary>
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+
+    /// <summary>User → role assignments table.</summary>
+    public DbSet<UserRole> UserRoles => Set<UserRole>();
+
     /// <summary>Idempotency records table.</summary>
     public DbSet<IdempotentRequest> IdempotentRequests => Set<IdempotentRequest>();
 

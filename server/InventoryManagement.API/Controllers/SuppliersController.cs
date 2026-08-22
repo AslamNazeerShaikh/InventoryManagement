@@ -1,4 +1,6 @@
 using InventoryManagement.API.Infrastructure;
+using InventoryManagement.API.Infrastructure.Authorization;
+using InventoryManagement.Domain.Authorization;
 using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.DTOs;
 using InventoryManagement.Domain.Interfaces;
@@ -12,7 +14,7 @@ namespace InventoryManagement.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
-[Authorize(Policy = AuthConstants.Policies.AllRoles)]
+[HasPermission(Permissions.Suppliers.Read)]
 public class SuppliersController : ApiControllerBase
 {
     private readonly ISupplierService _supplierService;
@@ -47,7 +49,7 @@ public class SuppliersController : ApiControllerBase
 
     /// <summary>Creates a supplier (Admin or Provider).</summary>
     [HttpPost]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Suppliers.Manage)]
     public async Task<ActionResult<ApiResponse<SupplierDto>>> CreateSupplier(
         [FromBody] CreateSupplierDto createDto,
         CancellationToken cancellationToken
@@ -67,7 +69,7 @@ public class SuppliersController : ApiControllerBase
 
     /// <summary>Updates a supplier (Admin or Provider).</summary>
     [HttpPut("{id:int}")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Suppliers.Manage)]
     public async Task<ActionResult<ApiResponse<SupplierDto>>> UpdateSupplier(
         int id,
         [FromBody] UpdateSupplierDto updateDto,
@@ -76,7 +78,7 @@ public class SuppliersController : ApiControllerBase
 
     /// <summary>Deletes a supplier that has no linked items (Admin only).</summary>
     [HttpDelete("{id:int}")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOnly)]
+    [HasPermission(Permissions.Suppliers.Manage)]
     public async Task<ActionResult<ApiResponse<bool>>> DeleteSupplier(
         int id,
         CancellationToken cancellationToken

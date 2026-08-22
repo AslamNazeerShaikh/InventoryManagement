@@ -197,7 +197,7 @@ export function MaintenanceFormModal({
                 <option value="">Select an item…</option>
                 {items.map((i) => (
                   <option key={i.id} value={i.id}>
-                    {i.equipmentName}
+                    {i.name}
                     {i.serialNumber ? ` · ${i.serialNumber}` : ""}
                   </option>
                 ))}

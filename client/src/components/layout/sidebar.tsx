@@ -9,7 +9,7 @@ import { navItems } from "@/components/layout/nav";
 import { APP_NAME, APP_TAGLINE } from "@/lib/config";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { cn, roleLabels, roleTones } from "@/lib/utils";
+import { cn, roleTone } from "@/lib/utils";
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
@@ -89,8 +89,8 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                 {user.name}
               </p>
               <div className="mt-0.5">
-                <Badge tone={roleTones[user.role]}>
-                  {roleLabels[user.role]}
+                <Badge tone={roleTone(user.roles[0] ?? "")}>
+                  {user.roles[0] ?? "Member"}
                 </Badge>
               </div>
             </div>

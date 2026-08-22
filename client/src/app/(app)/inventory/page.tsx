@@ -119,7 +119,7 @@ export default function InventoryPage() {
     try {
       await api.inventory.remove(toDelete.id);
       toast.success("Item deleted", {
-        description: `${toDelete.equipmentName} was removed.`,
+        description: `${toDelete.name} was removed.`,
       });
       setToDelete(null);
       reload();
@@ -306,7 +306,7 @@ export default function InventoryPage() {
                               href={`/inventory/${item.id}`}
                               className="block truncate font-medium text-white transition hover:text-brand-300"
                             >
-                              {item.equipmentName}
+                              {item.name}
                             </Link>
                             <p className="truncate text-xs text-slate-500">
                               {[item.category, item.brand]
@@ -432,7 +432,7 @@ export default function InventoryPage() {
         onConfirm={handleDelete}
         loading={deleting}
         title="Delete inventory item"
-        description={`This will permanently remove "${toDelete?.equipmentName}". This action cannot be undone.`}
+        description={`This will permanently remove "${toDelete?.name}". This action cannot be undone.`}
         confirmText="Delete"
       />
     </div>

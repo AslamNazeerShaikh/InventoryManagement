@@ -56,7 +56,7 @@ export default function MaintenancePage() {
     const term = search.trim().toLowerCase();
     if (term) {
       list = list.filter((m) =>
-        [m.title, m.equipmentName].some((f) => f.toLowerCase().includes(term)),
+        [m.title, m.itemName].some((f) => f.toLowerCase().includes(term)),
       );
     }
     if (status === "open") {
@@ -195,7 +195,7 @@ export default function MaintenancePage() {
                       </div>
                     </TD>
                     <TD className="hidden truncate text-slate-300 md:table-cell">
-                      {m.equipmentName}
+                      {m.itemName}
                     </TD>
                     <TD className="hidden text-slate-400 lg:table-cell">
                       {maintenanceTypeLabels[m.maintenanceType]}

@@ -120,11 +120,6 @@ namespace InventoryManagement.Infrastructure.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("EquipmentName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
-
                     b.Property<DateTime?>("ExpiryDate")
                         .HasColumnType("TEXT");
 
@@ -146,6 +141,11 @@ namespace InventoryManagement.Infrastructure.Migrations
 
                     b.Property<string>("Model")
                         .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Notes")
@@ -197,9 +197,6 @@ namespace InventoryManagement.Infrastructure.Migrations
                     b.HasIndex("CreatedByUserId")
                         .HasDatabaseName("IX_Inventories_CreatedByUserId");
 
-                    b.HasIndex("EquipmentName")
-                        .HasDatabaseName("IX_Inventories_EquipmentName");
-
                     b.HasIndex("ExpiryDate")
                         .HasDatabaseName("IX_Inventories_ExpiryDate");
 
@@ -208,6 +205,9 @@ namespace InventoryManagement.Infrastructure.Migrations
 
                     b.HasIndex("LocationId")
                         .HasDatabaseName("IX_Inventories_LocationId");
+
+                    b.HasIndex("Name")
+                        .HasDatabaseName("IX_Inventories_Name");
 
                     b.HasIndex("Status")
                         .HasDatabaseName("IX_Inventories_Status");
@@ -506,6 +506,180 @@ namespace InventoryManagement.Infrastructure.Migrations
                     b.ToTable("MaintenanceSchedules", (string)null);
                 });
 
+            modelBuilder.Entity("InventoryManagement.Domain.Entities.Permission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ConcurrencyToken")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeletedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Permissions_TenantId_Code");
+
+                    b.ToTable("Permissions", (string)null);
+                });
+
+            modelBuilder.Entity("InventoryManagement.Domain.Entities.Role", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("ConcurrencyToken")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeletedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsSystem")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Roles_TenantId_Name");
+
+                    b.ToTable("Roles", (string)null);
+                });
+
+            modelBuilder.Entity("InventoryManagement.Domain.Entities.RolePermission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("ConcurrencyToken")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeletedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("PermissionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("RoleId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PermissionId")
+                        .HasDatabaseName("IX_RolePermissions_PermissionId");
+
+                    b.HasIndex("RoleId");
+
+                    b.HasIndex("TenantId", "RoleId", "PermissionId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_RolePermissions_TenantId_RoleId_PermissionId");
+
+                    b.ToTable("RolePermissions", (string)null);
+                });
+
             modelBuilder.Entity("InventoryManagement.Domain.Entities.StockMovement", b =>
                 {
                     b.Property<int>("Id")
@@ -726,13 +900,7 @@ namespace InventoryManagement.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("INTEGER");
 
-                    b.Property<bool>("IsAdmin")
-                        .HasColumnType("INTEGER");
-
                     b.Property<bool>("IsDeleted")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("IsProvider")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("LastLoginAt")
@@ -754,9 +922,6 @@ namespace InventoryManagement.Infrastructure.Migrations
 
                     b.Property<DateTime?>("RefreshTokenExpiryTime")
                         .HasColumnType("TEXT");
-
-                    b.Property<int>("Role")
-                        .HasColumnType("INTEGER");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("TEXT");
@@ -784,6 +949,63 @@ namespace InventoryManagement.Infrastructure.Migrations
                         .HasDatabaseName("IX_Users_TenantId");
 
                     b.ToTable("Users", (string)null);
+                });
+
+            modelBuilder.Entity("InventoryManagement.Domain.Entities.UserRole", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("ConcurrencyToken")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeletedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("RoleId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RoleId")
+                        .HasDatabaseName("IX_UserRoles_RoleId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("TenantId", "UserId", "RoleId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_UserRoles_TenantId_UserId_RoleId");
+
+                    b.ToTable("UserRoles", (string)null);
                 });
 
             modelBuilder.Entity("InventoryManagement.Domain.Entities.Inventory", b =>
@@ -871,6 +1093,25 @@ namespace InventoryManagement.Infrastructure.Migrations
                     b.Navigation("PerformedByUser");
                 });
 
+            modelBuilder.Entity("InventoryManagement.Domain.Entities.RolePermission", b =>
+                {
+                    b.HasOne("InventoryManagement.Domain.Entities.Permission", "Permission")
+                        .WithMany("RolePermissions")
+                        .HasForeignKey("PermissionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("InventoryManagement.Domain.Entities.Role", "Role")
+                        .WithMany("RolePermissions")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Permission");
+
+                    b.Navigation("Role");
+                });
+
             modelBuilder.Entity("InventoryManagement.Domain.Entities.StockMovement", b =>
                 {
                     b.HasOne("InventoryManagement.Domain.Entities.InventoryAssignment", "Assignment")
@@ -917,6 +1158,25 @@ namespace InventoryManagement.Infrastructure.Migrations
                     b.Navigation("ToLocation");
                 });
 
+            modelBuilder.Entity("InventoryManagement.Domain.Entities.UserRole", b =>
+                {
+                    b.HasOne("InventoryManagement.Domain.Entities.Role", "Role")
+                        .WithMany("UserRoles")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("InventoryManagement.Domain.Entities.User", "User")
+                        .WithMany("UserRoles")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Role");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("InventoryManagement.Domain.Entities.Inventory", b =>
                 {
                     b.Navigation("Assignments");
@@ -933,6 +1193,18 @@ namespace InventoryManagement.Infrastructure.Migrations
                     b.Navigation("Inventories");
                 });
 
+            modelBuilder.Entity("InventoryManagement.Domain.Entities.Permission", b =>
+                {
+                    b.Navigation("RolePermissions");
+                });
+
+            modelBuilder.Entity("InventoryManagement.Domain.Entities.Role", b =>
+                {
+                    b.Navigation("RolePermissions");
+
+                    b.Navigation("UserRoles");
+                });
+
             modelBuilder.Entity("InventoryManagement.Domain.Entities.Supplier", b =>
                 {
                     b.Navigation("Inventories");
@@ -943,6 +1215,8 @@ namespace InventoryManagement.Infrastructure.Migrations
                     b.Navigation("AssignedInventories");
 
                     b.Navigation("CreatedInventories");
+
+                    b.Navigation("UserRoles");
                 });
 #pragma warning restore 612, 618
         }

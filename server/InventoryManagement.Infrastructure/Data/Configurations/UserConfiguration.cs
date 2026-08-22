@@ -22,8 +22,6 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.Property(u => u.PasswordHash).IsRequired().HasMaxLength(500);
 
-        builder.Property(u => u.Role).IsRequired().HasConversion<int>();
-
         builder.Property(u => u.RefreshToken).HasMaxLength(500);
 
         // Auditing fields from BaseEntity

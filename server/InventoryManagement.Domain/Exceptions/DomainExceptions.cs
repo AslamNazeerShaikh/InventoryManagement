@@ -48,9 +48,9 @@ public class InvalidOperationDomainException : DomainException
 public class InsufficientInventoryException : DomainException
 {
     /// <summary>Creates the exception describing requested versus available quantities.</summary>
-    public InsufficientInventoryException(string equipmentName, int requested, int available)
+    public InsufficientInventoryException(string itemName, int requested, int available)
         : base(
-            $"Insufficient inventory for '{equipmentName}'. Requested: {requested}, Available: {available}"
+            $"Insufficient stock for '{itemName}'. Requested: {requested}, Available: {available}"
         ) { }
 }
 
@@ -58,9 +58,9 @@ public class InsufficientInventoryException : DomainException
 public class ExpiredInventoryException : DomainException
 {
     /// <summary>Creates the exception describing the expired item.</summary>
-    public ExpiredInventoryException(string equipmentName, DateTime expiryDate)
+    public ExpiredInventoryException(string itemName, DateTime expiryDate)
         : base(
-            $"Cannot assign expired inventory '{equipmentName}'. Expired on: {expiryDate:yyyy-MM-dd}"
+            $"Cannot assign expired item '{itemName}'. Expired on: {expiryDate:yyyy-MM-dd}"
         ) { }
 }
 

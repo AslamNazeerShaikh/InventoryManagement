@@ -9,7 +9,7 @@ public class InventoryRepositoryTests
     private static Inventory NewInventory(string name, InventoryStatus status, int available) =>
         new()
         {
-            EquipmentName = name,
+            Name = name,
             Status = status,
             Quantity = available,
             AvailableQuantity = available,
@@ -28,7 +28,7 @@ public class InventoryRepositoryTests
         Assert.True(entity.Id > 0);
         var loaded = await repository.GetByIdAsync(entity.Id);
         Assert.NotNull(loaded);
-        Assert.Equal("Defibrillator", loaded!.EquipmentName);
+        Assert.Equal("Defibrillator", loaded!.Name);
     }
 
     [Fact]
@@ -45,7 +45,7 @@ public class InventoryRepositoryTests
         var result = await repository.GetAvailableInventoriesAsync();
 
         Assert.Single(result);
-        Assert.Equal("Available-1", result.First().EquipmentName);
+        Assert.Equal("Available-1", result.First().Name);
     }
 
     [Fact]
@@ -76,6 +76,6 @@ public class InventoryRepositoryTests
         var result = await repository.GetLowStockInventoriesAsync(threshold: 5);
 
         Assert.Single(result);
-        Assert.Equal("Low", result.First().EquipmentName);
+        Assert.Equal("Low", result.First().Name);
     }
 }

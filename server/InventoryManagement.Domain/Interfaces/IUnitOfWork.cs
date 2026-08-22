@@ -30,6 +30,15 @@ public interface IUnitOfWork
     /// <summary>Maintenance-schedule repository bound to the shared session.</summary>
     IMaintenanceScheduleRepository MaintenanceSchedules { get; }
 
+    /// <summary>Role repository bound to the shared session.</summary>
+    IRoleRepository Roles { get; }
+
+    /// <summary>Permission-catalog repository bound to the shared session.</summary>
+    IPermissionRepository Permissions { get; }
+
+    /// <summary>User-role assignment repository bound to the shared session.</summary>
+    IUserRoleRepository UserRoles { get; }
+
     /// <summary>
     /// Persists all staged changes. Translates optimistic-concurrency failures into a
     /// <see cref="Exceptions.ConcurrencyConflictException"/> for consistent handling.

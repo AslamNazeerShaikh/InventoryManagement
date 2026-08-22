@@ -10,8 +10,8 @@ namespace InventoryManagement.Domain.Entities;
 /// </summary>
 public class Inventory : BaseEntity
 {
-    /// <summary>Human-readable equipment name.</summary>
-    public string EquipmentName { get; set; } = string.Empty;
+    /// <summary>Human-readable item name.</summary>
+    public string Name { get; set; } = string.Empty;
 
     /// <summary>Optional free-text description.</summary>
     public string? Description { get; set; }

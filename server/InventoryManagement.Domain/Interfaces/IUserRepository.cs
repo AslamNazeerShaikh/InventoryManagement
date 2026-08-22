@@ -21,11 +21,6 @@ public interface IUserRepository : IGenericRepository<User>
         CancellationToken cancellationToken = default
     );
 
-    /// <summary>Lists active nurse-practitioner users ordered by name.</summary>
-    Task<IReadOnlyList<User>> GetNursePractitionersAsync(
-        CancellationToken cancellationToken = default
-    );
-
     /// <summary>Lists active users ordered by name.</summary>
     Task<IReadOnlyList<User>> GetActiveUsersAsync(CancellationToken cancellationToken = default);
 }

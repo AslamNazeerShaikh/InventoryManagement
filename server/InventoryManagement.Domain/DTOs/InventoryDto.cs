@@ -9,8 +9,8 @@ public class InventoryDto
     /// <summary>Item identifier.</summary>
     public int Id { get; set; }
 
-    /// <summary>Equipment name.</summary>
-    public string EquipmentName { get; set; } = string.Empty;
+    /// <summary>Item name.</summary>
+    public string Name { get; set; } = string.Empty;
 
     /// <summary>Optional description.</summary>
     public string? Description { get; set; }
@@ -94,10 +94,10 @@ public class InventoryDto
 /// <summary>Payload for creating an inventory item.</summary>
 public class CreateInventoryDto
 {
-    /// <summary>Equipment name (required, 1–200 chars).</summary>
+    /// <summary>Item name (required, 1–200 chars).</summary>
     [Required(AllowEmptyStrings = false)]
     [StringLength(200, MinimumLength = 1)]
-    public string EquipmentName { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
 
     /// <summary>Optional description (≤1000 chars).</summary>
     [StringLength(1000)]
@@ -169,10 +169,10 @@ public class CreateInventoryDto
 /// <summary>Payload for updating an inventory item.</summary>
 public class UpdateInventoryDto
 {
-    /// <summary>Equipment name (required, 1–200 chars).</summary>
+    /// <summary>Item name (required, 1–200 chars).</summary>
     [Required(AllowEmptyStrings = false)]
     [StringLength(200, MinimumLength = 1)]
-    public string EquipmentName { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
 
     /// <summary>Optional description (≤1000 chars).</summary>
     [StringLength(1000)]

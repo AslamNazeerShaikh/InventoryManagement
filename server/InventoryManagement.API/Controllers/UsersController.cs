@@ -1,4 +1,6 @@
 using InventoryManagement.API.Infrastructure;
+using InventoryManagement.API.Infrastructure.Authorization;
+using InventoryManagement.Domain.Authorization;
 using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.DTOs;
 using InventoryManagement.Domain.Interfaces;
@@ -12,7 +14,7 @@ namespace InventoryManagement.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
-[Authorize(Policy = AuthConstants.Policies.AllRoles)]
+[Authorize]
 public class UsersController : ApiControllerBase
 {
     private readonly IUserService _userService;
@@ -27,14 +29,14 @@ public class UsersController : ApiControllerBase
 
     /// <summary>Lists all users (Admin only).</summary>
     [HttpGet]
-    [Authorize(Policy = AuthConstants.Policies.AdminOnly)]
+    [HasPermission(Permissions.Users.Manage)]
     public async Task<ActionResult<ApiResponse<IEnumerable<UserDto>>>> GetAllUsers(
         CancellationToken cancellationToken
     ) => HandleResult(await _userService.GetAllUsersAsync(cancellationToken));
 
     /// <summary>Lists users with pagination (Admin only).</summary>
     [HttpGet("paged")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOnly)]
+    [HasPermission(Permissions.Users.Manage)]
     public async Task<ActionResult<ApiResponse<PagedResult<UserDto>>>> GetUsersPaged(
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 10,
@@ -53,7 +55,7 @@ public class UsersController : ApiControllerBase
             return BadRequest(ApiResponse<UserDto>.Failure("Invalid user ID in token"));
         }
 
-        if (!IsAdmin() && currentUserId != id)
+        if (!CanManageUsers() && currentUserId != id)
         {
             return Forbid();
         }
@@ -63,7 +65,7 @@ public class UsersController : ApiControllerBase
 
     /// <summary>Gets a user by email (Admin only).</summary>
     [HttpGet("by-email/{email}")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOnly)]
+    [HasPermission(Permissions.Users.Manage)]
     public async Task<ActionResult<ApiResponse<UserDto>>> GetUserByEmail(
         string email,
         CancellationToken cancellationToken
@@ -71,7 +73,7 @@ public class UsersController : ApiControllerBase
 
     /// <summary>Creates a new user (Admin only).</summary>
     [HttpPost]
-    [Authorize(Policy = AuthConstants.Policies.AdminOnly)]
+    [HasPermission(Permissions.Users.Manage)]
     public async Task<ActionResult<ApiResponse<UserDto>>> CreateUser(
         [FromBody] CreateUserDto createUserDto,
         CancellationToken cancellationToken
@@ -102,30 +104,22 @@ public class UsersController : ApiControllerBase
             return BadRequest(ApiResponse<UserDto>.Failure("Invalid user ID in token"));
         }
 
-        var isAdmin = IsAdmin();
-        if (!isAdmin && currentUserId != id)
+        var canManageUsers = HasPermission(Permissions.Users.Manage);
+        if (!canManageUsers && currentUserId != id)
         {
             return Forbid();
         }
 
-        // Non-admins cannot alter role/admin/provider flags: preserve the persisted values.
-        if (!isAdmin)
-        {
-            var current = await _userService.GetUserByIdAsync(id, cancellationToken);
-            if (current is { IsSuccess: true, Value: not null })
-            {
-                updateUserDto.Role = current.Value.Role;
-                updateUserDto.IsAdmin = current.Value.IsAdmin;
-                updateUserDto.IsProvider = current.Value.IsProvider;
-            }
-        }
-
-        return HandleResult(await _userService.UpdateUserAsync(id, updateUserDto, cancellationToken));
+        // Only privileged callers may change role membership or active status; a self-service profile
+        // update preserves them.
+        return HandleResult(
+            await _userService.UpdateUserAsync(id, updateUserDto, canManageUsers, cancellationToken)
+        );
     }
 
     /// <summary>Deletes a user (Admin only; cannot delete self).</summary>
     [HttpDelete("{id:int}")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOnly)]
+    [HasPermission(Permissions.Users.Manage)]
     public async Task<ActionResult<ApiResponse<bool>>> DeleteUser(
         int id,
         CancellationToken cancellationToken
@@ -139,16 +133,9 @@ public class UsersController : ApiControllerBase
         return HandleResult(await _userService.DeleteUserAsync(id, cancellationToken));
     }
 
-    /// <summary>Lists nurse-practitioner users (Admin or Provider).</summary>
-    [HttpGet("nurse-practitioners")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
-    public async Task<ActionResult<ApiResponse<IEnumerable<UserDto>>>> GetNursePractitioners(
-        CancellationToken cancellationToken
-    ) => HandleResult(await _userService.GetNursePractitionersAsync(cancellationToken));
-
-    /// <summary>Lists active users (Admin or Provider).</summary>
+    /// <summary>Lists active users, e.g. to select an assignment recipient (requires users.read).</summary>
     [HttpGet("active")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Users.Read)]
     public async Task<ActionResult<ApiResponse<IEnumerable<UserDto>>>> GetActiveUsers(
         CancellationToken cancellationToken
     ) => HandleResult(await _userService.GetActiveUsersAsync(cancellationToken));
@@ -156,5 +143,5 @@ public class UsersController : ApiControllerBase
     private bool TryGetCallerId(out int userId) =>
         int.TryParse(User.FindFirst(AuthConstants.Claims.UserId)?.Value, out userId);
 
-    private bool IsAdmin() => User.FindFirst(AuthConstants.Claims.IsAdmin)?.Value == "True";
+    private bool CanManageUsers() => HasPermission(Permissions.Users.Manage);
 }

@@ -51,7 +51,7 @@ public class InventoryRepository : GenericRepository<Inventory>, IInventoryRepos
             .AsNoTracking()
             .Where(x => x.Status == InventoryStatus.Available && x.AvailableQuantity > 0)
             .Include(x => x.CreatedByUser)
-            .OrderBy(x => x.EquipmentName)
+            .OrderBy(x => x.Name)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -64,7 +64,7 @@ public class InventoryRepository : GenericRepository<Inventory>, IInventoryRepos
             .AsNoTracking()
             .Where(x => x.Status == status)
             .Include(x => x.CreatedByUser)
-            .OrderBy(x => x.EquipmentName)
+            .OrderBy(x => x.Name)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -77,7 +77,7 @@ public class InventoryRepository : GenericRepository<Inventory>, IInventoryRepos
             .AsNoTracking()
             .Where(x => x.Category == category)
             .Include(x => x.CreatedByUser)
-            .OrderBy(x => x.EquipmentName)
+            .OrderBy(x => x.Name)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -89,7 +89,7 @@ public class InventoryRepository : GenericRepository<Inventory>, IInventoryRepos
         await EntitySet
             .AsNoTracking()
             .Where(x =>
-                x.EquipmentName.Contains(searchTerm)
+                x.Name.Contains(searchTerm)
                 || (x.Description != null && x.Description.Contains(searchTerm))
                 || (x.Category != null && x.Category.Contains(searchTerm))
                 || (x.Brand != null && x.Brand.Contains(searchTerm))
@@ -98,7 +98,7 @@ public class InventoryRepository : GenericRepository<Inventory>, IInventoryRepos
                 || (x.SerialNumber != null && x.SerialNumber.Contains(searchTerm))
             )
             .Include(x => x.CreatedByUser)
-            .OrderBy(x => x.EquipmentName)
+            .OrderBy(x => x.Name)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 

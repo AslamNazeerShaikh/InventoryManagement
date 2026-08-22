@@ -59,7 +59,7 @@ export function RenewModal({
       };
       await api.assignments.renew(dto);
       toast.success("Assignment renewed", {
-        description: `${assignment.equipmentName} extended to ${formatDate(iso)}.`,
+        description: `${assignment.itemName} extended to ${formatDate(iso)}.`,
       });
       onDone();
       onClose();
@@ -80,7 +80,7 @@ export function RenewModal({
       title="Renew assignment"
       description={
         assignment
-          ? `${assignment.equipmentName} · ${assignment.userName}${
+          ? `${assignment.itemName} · ${assignment.userName}${
               assignment.renewalCount > 0
                 ? ` · renewed ${assignment.renewalCount}×`
                 : ""

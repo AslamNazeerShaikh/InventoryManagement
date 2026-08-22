@@ -35,7 +35,7 @@ public sealed class InventoryService : IInventoryService
                     q.Include(x => x.CreatedByUser)
                         .Include(x => x.SupplierEntity)
                         .Include(x => x.LocationEntity),
-                orderBy: q => q.OrderBy(x => x.EquipmentName),
+                orderBy: q => q.OrderBy(x => x.Name),
                 cancellationToken: cancellationToken
             )
             .ConfigureAwait(false);
@@ -274,7 +274,7 @@ public sealed class InventoryService : IInventoryService
                     (
                         term == null
                         || term == ""
-                        || x.EquipmentName.Contains(term)
+                        || x.Name.Contains(term)
                         || (x.Description != null && x.Description.Contains(term))
                         || (x.Category != null && x.Category.Contains(term))
                         || (x.Brand != null && x.Brand.Contains(term))
@@ -290,7 +290,7 @@ public sealed class InventoryService : IInventoryService
                     q.Include(x => x.CreatedByUser)
                         .Include(x => x.SupplierEntity)
                         .Include(x => x.LocationEntity),
-                orderBy: q => q.OrderBy(x => x.EquipmentName),
+                orderBy: q => q.OrderBy(x => x.Name),
                 cancellationToken: cancellationToken
             )
             .ConfigureAwait(false);

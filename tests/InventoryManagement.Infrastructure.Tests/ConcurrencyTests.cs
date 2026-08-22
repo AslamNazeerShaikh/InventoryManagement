@@ -14,7 +14,7 @@ public class ConcurrencyTests
 
         var inventory = new Inventory
         {
-            EquipmentName = "Ventilator",
+            Name = "Ventilator",
             Quantity = 5,
             AvailableQuantity = 5,
             Status = InventoryStatus.Available,
@@ -45,7 +45,7 @@ public class ConcurrencyTests
 
         var inventory = new Inventory
         {
-            EquipmentName = "Pump",
+            Name = "Pump",
             Quantity = 1,
             AvailableQuantity = 1,
         };

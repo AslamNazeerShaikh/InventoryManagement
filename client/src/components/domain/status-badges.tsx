@@ -5,7 +5,6 @@ import {
   MaintenanceStatus,
   ReturnCondition,
   StockMovementType,
-  UserRole,
 } from "@/lib/types";
 import {
   assignmentStatusLabels,
@@ -16,8 +15,7 @@ import {
   maintenanceStatusTones,
   returnConditionLabels,
   returnConditionTones,
-  roleLabels,
-  roleTones,
+  roleTone,
   stockMovementLabels,
   stockMovementTones,
 } from "@/lib/utils";
@@ -38,8 +36,8 @@ export function AssignmentStatusBadge({ status }: { status: AssignmentStatus }) 
   );
 }
 
-export function RoleBadge({ role }: { role: UserRole }) {
-  return <Badge tone={roleTones[role]}>{roleLabels[role]}</Badge>;
+export function RoleBadge({ role }: { role: string }) {
+  return <Badge tone={roleTone(role)}>{role}</Badge>;
 }
 
 export function StockMovementBadge({ type }: { type: StockMovementType }) {

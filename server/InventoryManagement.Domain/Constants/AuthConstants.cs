@@ -1,31 +1,24 @@
 namespace InventoryManagement.Domain.Constants;
 
+/// <summary>Authentication/authorization claim names used across the token and the API.</summary>
 public static class AuthConstants
 {
-    public static class Roles
-    {
-        public const string Admin = "Admin";
-        public const string NursePractitioner = "NursePractitioner";
-        public const string Staff = "Staff";
-    }
-
+    /// <summary>JWT claim names.</summary>
     public static class Claims
     {
+        /// <summary>Authenticated user's identifier.</summary>
         public const string UserId = "user_id";
+
+        /// <summary>Authenticated user's email.</summary>
         public const string Email = "email";
+
+        /// <summary>Authenticated user's display name.</summary>
         public const string Name = "name";
-        public const string Role = "role";
-        public const string IsAdmin = "is_admin";
-        public const string IsProvider = "is_provider";
 
         /// <summary>Owning tenant of the authenticated user; drives request-scoped tenant isolation.</summary>
         public const string Tenant = "tenant";
-    }
 
-    public static class Policies
-    {
-        public const string AdminOnly = "AdminOnly";
-        public const string AdminOrProvider = "AdminOrProvider";
-        public const string AllRoles = "AllRoles";
+        /// <summary>A granted permission code. Emitted once per effective permission; checked by authorization.</summary>
+        public const string Permission = "permission";
     }
 }

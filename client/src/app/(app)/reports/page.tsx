@@ -121,7 +121,7 @@ export default function ReportsPage() {
       kpis.totalUnits > 0 ? Math.round((assignedUnits / kpis.totalUnits) * 100) : 0;
 
     const byItem = new Map<string, number>();
-    for (const x of a) byItem.set(x.equipmentName, (byItem.get(x.equipmentName) ?? 0) + 1);
+    for (const x of a) byItem.set(x.itemName, (byItem.get(x.itemName) ?? 0) + 1);
     const topItems = Array.from(byItem.entries())
       .map(([name, count]) => ({ name, count }))
       .sort((x, y) => y.count - x.count)
@@ -139,7 +139,7 @@ export default function ReportsPage() {
   function exportInventory() {
     exportCsv(timestampedName("inventory"), data?.inventory ?? [], [
       { header: "ID", value: (i) => i.id },
-      { header: "Equipment", value: (i) => i.equipmentName },
+      { header: "Item", value: (i) => i.name },
       { header: "Category", value: (i) => i.category },
       { header: "Brand", value: (i) => i.brand },
       { header: "Model", value: (i) => i.model },
@@ -159,7 +159,7 @@ export default function ReportsPage() {
   function exportAssignments() {
     exportCsv(timestampedName("assignments"), data?.assignments ?? [], [
       { header: "ID", value: (a) => a.id },
-      { header: "Equipment", value: (a) => a.equipmentName },
+      { header: "Item", value: (a) => a.itemName },
       { header: "Assignee", value: (a) => a.userName },
       { header: "Email", value: (a) => a.userEmail },
       { header: "Quantity", value: (a) => a.assignedQuantity },

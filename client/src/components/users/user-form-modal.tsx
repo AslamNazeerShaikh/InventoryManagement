@@ -3,40 +3,28 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
-import {
-  UserRole,
-  type CreateUserDto,
-  type UpdateUserDto,
-  type UserDto,
+import type {
+  CreateUserDto,
+  RoleDto,
+  UpdateUserDto,
+  UserDto,
 } from "@/lib/types";
-import { roleLabels } from "@/lib/utils";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 
 interface Draft {
   name: string;
   email: string;
   password: string;
-  role: UserRole;
-  isAdmin: boolean;
-  isProvider: boolean;
+  roleIds: number[];
   isActive: boolean;
 }
 
 function emptyDraft(): Draft {
-  return {
-    name: "",
-    email: "",
-    password: "",
-    role: UserRole.Staff,
-    isAdmin: false,
-    isProvider: false,
-    isActive: true,
-  };
+  return { name: "", email: "", password: "", roleIds: [], isActive: true };
 }
 
 export function UserFormModal({
@@ -52,25 +40,47 @@ export function UserFormModal({
 }) {
   const isEdit = Boolean(initial);
   const [draft, setDraft] = useState<Draft>(emptyDraft());
+  const [roles, setRoles] = useState<RoleDto[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setDraft(
-        initial
-          ? {
-              name: initial.name,
-              email: initial.email,
-              password: "",
-              role: initial.role,
-              isAdmin: initial.isAdmin,
-              isProvider: initial.isProvider,
-              isActive: initial.isActive,
-            }
-          : emptyDraft(),
-      );
-    }
+    if (!open) return;
+    let active = true;
+    api.roles
+      .list()
+      .then((list) => {
+        if (!active) return;
+        setRoles(list);
+        setDraft(
+          initial
+            ? {
+                name: initial.name,
+                email: initial.email,
+                password: "",
+                roleIds: list
+                  .filter((r) => initial.roles.includes(r.name))
+                  .map((r) => r.id),
+                isActive: initial.isActive,
+              }
+            : emptyDraft(),
+        );
+      })
+      .catch(() => {
+        if (active) setRoles([]);
+      });
+    return () => {
+      active = false;
+    };
   }, [open, initial]);
+
+  function toggleRole(id: number) {
+    setDraft((d) => ({
+      ...d,
+      roleIds: d.roleIds.includes(id)
+        ? d.roleIds.filter((r) => r !== id)
+        : [...d.roleIds, id],
+    }));
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -89,9 +99,7 @@ export function UserFormModal({
         const payload: UpdateUserDto = {
           name: draft.name.trim(),
           email: draft.email.trim(),
-          role: draft.role,
-          isAdmin: draft.isAdmin,
-          isProvider: draft.isProvider,
+          roleIds: draft.roleIds,
           isActive: draft.isActive,
         };
         await api.users.update(initial.id, payload);
@@ -101,9 +109,7 @@ export function UserFormModal({
           name: draft.name.trim(),
           email: draft.email.trim(),
           password: draft.password,
-          role: draft.role,
-          isAdmin: draft.isAdmin,
-          isProvider: draft.isProvider,
+          roleIds: draft.roleIds,
         };
         await api.users.create(payload);
         toast.success("User created", { description: draft.email });
@@ -175,46 +181,40 @@ export function UserFormModal({
               />
             </Field>
           )}
-          <Field label="Role" className="sm:col-span-2">
-            <Select
-              value={draft.role}
-              onChange={(e) =>
-                setDraft((d) => ({ ...d, role: Number(e.target.value) }))
-              }
-            >
-              {Object.values(UserRole)
-                .filter((v): v is number => typeof v === "number")
-                .map((v) => (
-                  <option key={v} value={v}>
-                    {roleLabels[v as UserRole]}
-                  </option>
-                ))}
-            </Select>
+          <Field label="Roles" hint="Grant one or more roles" className="sm:col-span-2">
+            <div className="grid gap-2 sm:grid-cols-2">
+              {roles.map((r) => (
+                <label
+                  key={r.id}
+                  className="flex items-center gap-2 rounded-lg border border-white/[0.06] px-3 py-2 text-sm"
+                >
+                  <input
+                    type="checkbox"
+                    checked={draft.roleIds.includes(r.id)}
+                    onChange={() => toggleRole(r.id)}
+                    className="size-4 accent-brand-500"
+                  />
+                  <span className="text-slate-200">{r.name}</span>
+                  {r.isSystem && (
+                    <span className="ml-auto text-xs text-slate-500">system</span>
+                  )}
+                </label>
+              ))}
+              {roles.length === 0 && (
+                <p className="text-sm text-slate-500">No roles available.</p>
+              )}
+            </div>
           </Field>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        {isEdit && (
           <Switch
-            label="Administrator"
-            description="Full system access"
-            checked={draft.isAdmin}
-            onChange={(v) => setDraft((d) => ({ ...d, isAdmin: v }))}
+            label="Active account"
+            description="Can sign in and use the system"
+            checked={draft.isActive}
+            onChange={(v) => setDraft((d) => ({ ...d, isActive: v }))}
           />
-          <Switch
-            label="Clinical provider"
-            description="Manage inventory & assignments"
-            checked={draft.isProvider}
-            onChange={(v) => setDraft((d) => ({ ...d, isProvider: v }))}
-          />
-          {isEdit && (
-            <Switch
-              label="Active account"
-              description="Can sign in and use the system"
-              checked={draft.isActive}
-              onChange={(v) => setDraft((d) => ({ ...d, isActive: v }))}
-            />
-          )}
-        </div>
+        )}
       </form>
     </Modal>
   );

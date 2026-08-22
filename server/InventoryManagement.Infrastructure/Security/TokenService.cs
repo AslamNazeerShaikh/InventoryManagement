@@ -54,15 +54,22 @@ public sealed class TokenService : ITokenService
             new(AuthConstants.Claims.UserId, user.Id.ToString()),
             new(AuthConstants.Claims.Email, user.Email),
             new(AuthConstants.Claims.Name, user.Name),
-            new(AuthConstants.Claims.Role, user.Role.ToString()),
-            new(AuthConstants.Claims.IsAdmin, user.IsAdmin.ToString()),
-            new(AuthConstants.Claims.IsProvider, user.IsProvider.ToString()),
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.Name, user.Name),
             new(ClaimTypes.Email, user.Email),
         };
 
-        claims.Add(new Claim(ClaimTypes.Role, ResolveRoleName(user)));
+        // Role names (standard role claim) and the user's effective permission codes. Permission
+        // claims make authorization fully stateless on the request path.
+        foreach (var role in user.Roles)
+        {
+            claims.Add(new Claim(ClaimTypes.Role, role));
+        }
+
+        foreach (var permission in user.Permissions)
+        {
+            claims.Add(new Claim(AuthConstants.Claims.Permission, permission));
+        }
 
         var signingCredentials = await _signingKeyProvider
             .GetSigningCredentialsAsync(cancellationToken)
@@ -96,15 +103,5 @@ public sealed class TokenService : ITokenService
         ArgumentException.ThrowIfNullOrEmpty(rawRefreshToken);
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(rawRefreshToken));
         return Convert.ToBase64String(hash);
-    }
-
-    private static string ResolveRoleName(UserDto user)
-    {
-        if (user.IsAdmin)
-        {
-            return AuthConstants.Roles.Admin;
-        }
-
-        return user.IsProvider ? AuthConstants.Roles.NursePractitioner : AuthConstants.Roles.Staff;
     }
 }

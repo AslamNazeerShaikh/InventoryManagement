@@ -59,7 +59,7 @@ export function InventoryDetailsModal({
       : 0;
 
   return (
-    <Modal open={open} onClose={onClose} size="lg" title={item.equipmentName}>
+    <Modal open={open} onClose={onClose} size="lg" title={item.name}>
       <div className="space-y-6">
         <div className="flex flex-wrap items-center gap-3">
           <InventoryStatusBadge status={item.status} />
