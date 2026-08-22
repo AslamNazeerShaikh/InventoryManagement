@@ -2,17 +2,19 @@
 
 ## Overview
 
-This document details the domain model structure, including entities, enums, DTOs, value objects, and their relationships within the Domain layer of the Inventory Management System.
+This document details the domain model structure, including entities, enums, DTOs, configuration options, security abstractions, repository contracts, and relationships within the Domain layer of the Inventory Management System.
 
 ## Domain Architecture
 
-The domain layer follows **Domain-Driven Design (DDD)** principles with:
+The domain layer follows **Domain-Driven Design (DDD)** and clean architecture principles with:
 
-- **Rich Domain Entities** with business logic
-- **Value Objects** for complex types
-- **Domain Events** (future consideration)
-- **Aggregate Roots** for consistency boundaries
-- **Repository Interfaces** for data access abstraction
+- **Entities** for persisted business state
+- **DTOs** for API contracts and automatic validation
+- **Result Pattern** (`Result` / `Result<T>`) for expected business outcomes
+- **Domain Exceptions** for unexpected/domain exception mapping
+- **Repository and Unit of Work Interfaces** for data access abstraction
+- **Security Abstractions** (`ITokenService`, `IPasswordHasher`, `ISecretClient`) so Application does not depend on Infrastructure
+- **Typed Options** (`JwtOptions`, `IdempotencyOptions`, `CorsOptions`) as configuration contracts
 
 ---
 
@@ -20,168 +22,139 @@ The domain layer follows **Domain-Driven Design (DDD)** principles with:
 
 ### 1. User Entity
 
-**Namespace**: `InventoryManagement.Domain.Entities`
-**Purpose**: Represents system users with role-based access control
+**Namespace**: `InventoryManagement.Domain.Entities`  
+**Purpose**: Represents system users with authentication material and role-based access control.
 
 ```csharp
 public class User : BaseEntity
 {
-    // Identity Properties
+    public string Name { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
-    public string Name { get; set; } = string.Empty;
-
-    // Role and Permissions
-    public UserRole Role { get; set; }
     public bool IsAdmin { get; set; }
     public bool IsProvider { get; set; }
-
-    // Authentication
+    public UserRole Role { get; set; } = UserRole.Staff;
+    public bool IsActive { get; set; } = true;
+    public DateTime? LastLoginAt { get; set; }
     public string? RefreshToken { get; set; }
     public DateTime? RefreshTokenExpiryTime { get; set; }
-
-    // Soft Delete
-    public bool IsActive { get; set; } = true;
-
-    // Navigation Properties
-    public virtual ICollection<InventoryAssignment> Assignments { get; set; } = new List<InventoryAssignment>();
-    public virtual ICollection<InventoryAssignment> AssignmentsMade { get; set; } = new List<InventoryAssignment>();
-    public virtual ICollection<InventoryAssignment> ReturnsProcessed { get; set; } = new List<InventoryAssignment>();
+    public virtual ICollection<InventoryAssignment> AssignedInventories { get; set; }
+    public virtual ICollection<Inventory> CreatedInventories { get; set; }
 }
 ```
 
 **Key Features:**
 
 - **Role-based Security**: Admin, NursePractitioner, Staff roles
-- **JWT Authentication**: Refresh token support
-- **Audit Trail**: Tracks who made/processed assignments
-- **Soft Delete**: Maintains historical integrity
+- **Microsoft Password Hashing**: `PasswordHash` stores PBKDF2-HMAC-SHA256 hashes created by `PasswordHasher`
+- **Refresh Token Safety**: `RefreshToken` stores only a SHA-256 hash; raw refresh tokens are returned to clients once
+- **Token Revocation**: Refresh tokens are cleared on logout and password change
 
 ---
 
 ### 2. Inventory Entity
 
-**Namespace**: `InventoryManagement.Domain.Entities`
-**Purpose**: Represents medical equipment and supplies
+**Namespace**: `InventoryManagement.Domain.Entities`  
+**Purpose**: Represents medical equipment and stock.
 
 ```csharp
 public class Inventory : BaseEntity
 {
-    // Basic Information
     public string EquipmentName { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public string Category { get; set; } = string.Empty;
-    public string? Manufacturer { get; set; }
+    public string? Category { get; set; }
+    public string? Brand { get; set; }
     public string? Model { get; set; }
-
-    // Identification
     public string? SerialNumber { get; set; }
     public string? Barcode { get; set; }
-
-    // Quantity and Cost
-    public int Quantity { get; set; }
-    public decimal UnitCost { get; set; }
-
-    // Lifecycle Management
     public DateTime? ExpiryDate { get; set; }
+    public DateTime? ManufactureDate { get; set; }
+    public decimal? PurchasePrice { get; set; }
+    public string? Supplier { get; set; }
+    public int Quantity { get; set; } = 1;
+    public int AvailableQuantity { get; set; } = 1;
     public InventoryStatus Status { get; set; } = InventoryStatus.Available;
-
-    // Location and Notes
     public string? Location { get; set; }
     public string? Notes { get; set; }
-
-    // Soft Delete
-    public bool IsActive { get; set; } = true;
-
-    // Navigation Properties
-    public virtual ICollection<InventoryAssignment> Assignments { get; set; } = new List<InventoryAssignment>();
-
-    // Business Methods
-    public bool IsExpiringSoon(int monthsThreshold = 3) =>
-        ExpiryDate.HasValue && ExpiryDate.Value <= DateTime.UtcNow.AddMonths(monthsThreshold);
-
-    public bool IsLowStock(int threshold = 5) =>
-        Quantity <= threshold;
-
-    public bool CanAssign(int requestedQuantity) =>
-        Status == InventoryStatus.Available &&
-        Quantity >= requestedQuantity &&
-        (!ExpiryDate.HasValue || ExpiryDate > DateTime.UtcNow);
+    public bool IsExpiryAlertSent { get; set; }
+    public int? CreatedByUserId { get; set; }
+    public virtual User? CreatedByUser { get; set; }
+    public virtual ICollection<InventoryAssignment> Assignments { get; set; }
 }
 ```
 
 **Key Features:**
 
-- **Barcode Support**: For scanning operations
-- **Expiry Tracking**: Date-based expiration management
-- **Status Management**: Comprehensive status tracking
-- **Business Logic**: Built-in validation methods
+- **Barcode and Serial Support**: Unique for non-deleted rows when present
+- **Quantity Model**: `Quantity` is total owned; `AvailableQuantity` is unassigned stock
+- **Optimistic Concurrency**: `ConcurrencyToken` prevents lost updates and overselling
+- **Status Management**: Available, Assigned, Reserved, Expired, Damaged, Disposed
 
 ---
 
 ### 3. InventoryAssignment Entity
 
-**Namespace**: `InventoryManagement.Domain.Entities`
-**Purpose**: Tracks equipment assignments with complete lifecycle
+**Namespace**: `InventoryManagement.Domain.Entities`  
+**Purpose**: Tracks equipment assignments with assignment/return lifecycle.
 
 ```csharp
 public class InventoryAssignment : BaseEntity
 {
-    // References
     public int InventoryId { get; set; }
     public int UserId { get; set; }
-    public int AssignedByUserId { get; set; }
-    public int? ReturnedToUserId { get; set; }
-
-    // Assignment Details
-    public int QuantityAssigned { get; set; }
-    public DateTime AssignedDate { get; set; }
+    public int AssignedQuantity { get; set; } = 1;
+    public DateTime AssignedDate { get; set; } = DateTime.UtcNow;
+    public DateTime? ReturnDate { get; set; }
     public DateTime? ExpectedReturnDate { get; set; }
     public AssignmentStatus Status { get; set; } = AssignmentStatus.Active;
-    public string? Notes { get; set; }
-
-    // Return Details
-    public int? QuantityReturned { get; set; }
-    public DateTime? ActualReturnDate { get; set; }
-    public string? ReturnCondition { get; set; }
+    public string? AssignmentNotes { get; set; }
     public string? ReturnNotes { get; set; }
-
-    // Soft Delete
-    public bool IsActive { get; set; } = true;
-
-    // Navigation Properties
+    public int? AssignedByUserId { get; set; }
+    public int? ReturnedToUserId { get; set; }
     public virtual Inventory Inventory { get; set; } = null!;
     public virtual User User { get; set; } = null!;
-    public virtual User AssignedByUser { get; set; } = null!;
+    public virtual User? AssignedByUser { get; set; }
     public virtual User? ReturnedToUser { get; set; }
-
-    // Business Methods
-    public bool IsOverdue() =>
-        Status == AssignmentStatus.Active &&
-        ExpectedReturnDate.HasValue &&
-        ExpectedReturnDate < DateTime.UtcNow;
-
-    public bool CanReturn() =>
-        Status == AssignmentStatus.Active;
-
-    public void ProcessReturn(int returnedQuantity, string condition, string? notes, int processedByUserId)
-    {
-        QuantityReturned = returnedQuantity;
-        ActualReturnDate = DateTime.UtcNow;
-        ReturnCondition = condition;
-        ReturnNotes = notes;
-        ReturnedToUserId = processedByUserId;
-        Status = AssignmentStatus.Returned;
-    }
 }
 ```
 
 **Key Features:**
 
-- **Complete Audit Trail**: Tracks who assigned and who processed returns
-- **Quantity Tracking**: Supports partial returns
-- **Status Lifecycle**: From Active to Returned/Expired/Lost/Damaged
-- **Business Logic**: Built-in validation and processing methods
+- **Complete Audit Trail**: Tracks recipient, assigner, return handler, dates, and notes
+- **Transactional Workflows**: Create/return operations run inside `ExecuteInTransactionAsync`
+- **Concurrency Protection**: Conflicting stock updates surface as HTTP 409
+
+---
+
+### 4. IdempotentRequest Entity
+
+**Namespace**: `InventoryManagement.Domain.Entities`  
+**Purpose**: Persists idempotency lock and replay state for mutating HTTP requests.
+
+```csharp
+public class IdempotentRequest
+{
+    public string IdempotencyKey { get; set; } = string.Empty;
+    public string RequestMethod { get; set; } = string.Empty;
+    public string RequestPath { get; set; } = string.Empty;
+    public string? RequestHash { get; set; }
+    public int ResponseStatusCode { get; set; }
+    public string? ResponseBody { get; set; }
+    public string? ResponseContentType { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? CompletedAt { get; set; }
+    public DateTime LockExpiresAt { get; set; }
+    public DateTime? ExpiresAt { get; set; }
+    public bool IsCompleted { get; set; }
+}
+```
+
+**Key Features:**
+
+- **Locking**: In-progress requests return 409 for duplicate keys
+- **Replay**: Completed responses are replayed with `Idempotency-Replayed: true`
+- **Collision Detection**: SHA-256 request-body hash returns 422 for key/payload mismatch
+- **Sensitive Exclusion**: `/api/auth` is excluded by default
 
 ---
 
@@ -189,24 +162,29 @@ public class InventoryAssignment : BaseEntity
 
 ### BaseEntity Abstract Class
 
-**Purpose**: Provides common audit fields for all entities
+**Purpose**: Provides identity, audit fields, soft delete, and provider-agnostic optimistic concurrency.
 
 ```csharp
 public abstract class BaseEntity
 {
     public int Id { get; set; }
-    public DateTime CreatedAt { get; set; }
-    public DateTime UpdatedAt { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
     public string? CreatedBy { get; set; }
     public string? UpdatedBy { get; set; }
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
+    public string? DeletedBy { get; set; }
+    public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
 }
 ```
 
 **Benefits:**
 
-- **Automatic Auditing**: CreatedAt, UpdatedAt timestamps
-- **User Tracking**: CreatedBy, UpdatedBy for accountability
-- **Consistent Interface**: All entities inherit common properties
+- **Automatic Auditing**: Timestamps and actor fields
+- **Soft Delete**: Global query filters exclude deleted rows
+- **Optimistic Concurrency**: `ConcurrencyToken` is configured as an EF concurrency token and rotated on every insert/update
+- **SQLite Compatible**: Does not rely on database-native `rowversion`
 
 ---
 
@@ -215,67 +193,26 @@ public abstract class BaseEntity
 ### 1. UserRole Enum
 
 ```csharp
-public enum UserRole
-{
-    Admin = 1,
-    NursePractitioner = 2,
-    Staff = 3
-}
+public enum UserRole { Admin = 1, NursePractitioner = 2, Staff = 3 }
 ```
-
-**Usage:**
-
-- **Admin**: Full system access, user management
-- **NursePractitioner**: Can manage inventory and assignments
-- **Staff**: Read-only access to assigned items
 
 ### 2. InventoryStatus Enum
 
 ```csharp
-public enum InventoryStatus
-{
-    Available = 1,
-    Assigned = 2,
-    Reserved = 3,
-    Expired = 4,
-    Damaged = 5,
-    Disposed = 6
-}
+public enum InventoryStatus { Available = 1, Assigned = 2, Reserved = 3, Expired = 4, Damaged = 5, Disposed = 6 }
 ```
-
-**Lifecycle:**
-
-- **Available**: Ready for assignment
-- **Assigned**: Currently assigned to users
-- **Reserved**: Reserved for specific use
-- **Expired**: Past expiration date
-- **Damaged**: Needs repair or disposal
-- **Disposed**: Permanently removed from inventory
 
 ### 3. AssignmentStatus Enum
 
 ```csharp
-public enum AssignmentStatus
-{
-    Active = 1,
-    Returned = 2,
-    Expired = 3,
-    Lost = 4,
-    Damaged = 5
-}
+public enum AssignmentStatus { Active = 1, Returned = 2, Expired = 3, Lost = 4, Damaged = 5 }
 ```
-
-**Lifecycle:**
-
-- **Active**: Currently assigned and in use
-- **Returned**: Successfully returned
-- **Expired**: Assignment period expired
-- **Lost**: Equipment reported lost
-- **Damaged**: Equipment damaged during assignment
 
 ---
 
 ## DTOs (Data Transfer Objects)
+
+DTOs use DataAnnotations and `[ApiController]` automatic validation. Invalid requests return `ApiResponse<object>.Failure("Validation failed", errors)` with HTTP 400.
 
 ### 1. User DTOs
 
@@ -285,14 +222,14 @@ public enum AssignmentStatus
 public class UserDto
 {
     public int Id { get; set; }
-    public string Email { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
-    public string Role { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
     public bool IsAdmin { get; set; }
     public bool IsProvider { get; set; }
+    public UserRole Role { get; set; }
     public bool IsActive { get; set; }
+    public DateTime? LastLoginAt { get; set; }
     public DateTime CreatedAt { get; set; }
-    public DateTime UpdatedAt { get; set; }
 }
 ```
 
@@ -301,247 +238,111 @@ public class UserDto
 ```csharp
 public class CreateUserDto
 {
-    [Required, EmailAddress]
-    public string Email { get; set; } = string.Empty;
-
-    [Required, MinLength(8)]
-    public string Password { get; set; } = string.Empty;
-
-    [Required, MaxLength(200)]
-    public string Name { get; set; } = string.Empty;
-
-    [Required]
-    public string Role { get; set; } = string.Empty;
-
+    [Required, StringLength(100, MinimumLength = 1)] public string Name { get; set; } = string.Empty;
+    [Required, EmailAddress, StringLength(256)] public string Email { get; set; } = string.Empty;
+    [Required, StringLength(128, MinimumLength = 8)] public string Password { get; set; } = string.Empty;
     public bool IsAdmin { get; set; }
     public bool IsProvider { get; set; }
-}
-```
-
-#### UpdateUserDto
-
-```csharp
-public class UpdateUserDto
-{
-    [Required, EmailAddress]
-    public string Email { get; set; } = string.Empty;
-
-    [Required, MaxLength(200)]
-    public string Name { get; set; } = string.Empty;
-
-    [Required]
-    public string Role { get; set; } = string.Empty;
-
-    public bool IsAdmin { get; set; }
-    public bool IsProvider { get; set; }
+    [EnumDataType(typeof(UserRole))] public UserRole Role { get; set; } = UserRole.Staff;
 }
 ```
 
 ### 2. Authentication DTOs
 
-#### LoginDto
-
 ```csharp
 public class LoginDto
 {
-    [Required, EmailAddress]
-    public string Email { get; set; } = string.Empty;
-
-    [Required]
-    public string Password { get; set; } = string.Empty;
+    [Required, EmailAddress, StringLength(256)] public string Email { get; set; } = string.Empty;
+    [Required, StringLength(128, MinimumLength = 1)] public string Password { get; set; } = string.Empty;
 }
-```
 
-#### AuthResponseDto
-
-```csharp
 public class AuthResponseDto
 {
-    public string Token { get; set; } = string.Empty;
+    public string AccessToken { get; set; } = string.Empty;
     public string RefreshToken { get; set; } = string.Empty;
     public DateTime ExpiresAt { get; set; }
     public UserDto User { get; set; } = null!;
 }
 ```
 
-#### ChangePasswordDto
-
-```csharp
-public class ChangePasswordDto
-{
-    [Required]
-    public string CurrentPassword { get; set; } = string.Empty;
-
-    [Required, MinLength(8)]
-    public string NewPassword { get; set; } = string.Empty;
-
-    [Required, Compare(nameof(NewPassword))]
-    public string ConfirmPassword { get; set; } = string.Empty;
-}
-```
-
 ### 3. Inventory DTOs
 
-#### InventoryDto
-
-```csharp
-public class InventoryDto
-{
-    public int Id { get; set; }
-    public string EquipmentName { get; set; } = string.Empty;
-    public string? Description { get; set; }
-    public string Category { get; set; } = string.Empty;
-    public string? Manufacturer { get; set; }
-    public string? Model { get; set; }
-    public string? SerialNumber { get; set; }
-    public string? Barcode { get; set; }
-    public int Quantity { get; set; }
-    public decimal UnitCost { get; set; }
-    public DateTime? ExpiryDate { get; set; }
-    public string Status { get; set; } = string.Empty;
-    public string? Location { get; set; }
-    public string? Notes { get; set; }
-    public bool IsExpiringSoon { get; set; }
-    public bool IsLowStock { get; set; }
-    public DateTime CreatedAt { get; set; }
-    public DateTime UpdatedAt { get; set; }
-}
-```
-
-#### CreateInventoryDto
-
-```csharp
-public class CreateInventoryDto
-{
-    [Required, MaxLength(200)]
-    public string EquipmentName { get; set; } = string.Empty;
-
-    [MaxLength(1000)]
-    public string? Description { get; set; }
-
-    [Required, MaxLength(100)]
-    public string Category { get; set; } = string.Empty;
-
-    [MaxLength(100)]
-    public string? Manufacturer { get; set; }
-
-    [MaxLength(100)]
-    public string? Model { get; set; }
-
-    [MaxLength(100)]
-    public string? SerialNumber { get; set; }
-
-    [MaxLength(50)]
-    public string? Barcode { get; set; }
-
-    [Required, Range(1, int.MaxValue)]
-    public int Quantity { get; set; }
-
-    [Required, Range(0.01, double.MaxValue)]
-    public decimal UnitCost { get; set; }
-
-    public DateTime? ExpiryDate { get; set; }
-
-    [MaxLength(200)]
-    public string? Location { get; set; }
-
-    [MaxLength(1000)]
-    public string? Notes { get; set; }
-}
-```
+`InventoryDto` exposes equipment data, `Quantity`, `AvailableQuantity`, `InventoryStatus`, creation data, and alert status. Create/update DTOs validate string lengths, optional fields, non-negative purchase price, and positive quantities.
 
 ### 4. Assignment DTOs
 
-#### InventoryAssignmentDto
-
-```csharp
-public class InventoryAssignmentDto
-{
-    public int Id { get; set; }
-    public int InventoryId { get; set; }
-    public string InventoryName { get; set; } = string.Empty;
-    public int UserId { get; set; }
-    public string UserName { get; set; } = string.Empty;
-    public int AssignedByUserId { get; set; }
-    public string AssignedByUserName { get; set; } = string.Empty;
-    public int QuantityAssigned { get; set; }
-    public DateTime AssignedDate { get; set; }
-    public DateTime? ExpectedReturnDate { get; set; }
-    public string Status { get; set; } = string.Empty;
-    public string? Notes { get; set; }
-    public int? QuantityReturned { get; set; }
-    public DateTime? ActualReturnDate { get; set; }
-    public string? ReturnCondition { get; set; }
-    public string? ReturnNotes { get; set; }
-    public bool IsOverdue { get; set; }
-    public DateTime CreatedAt { get; set; }
-}
-```
+`InventoryAssignmentDto` exposes inventory/user names, `AssignedQuantity`, assignment/return dates, `AssignmentStatus`, notes, and audit names. Create/update/return DTOs validate IDs, quantity, status, and note length.
 
 ### 5. Dashboard DTOs
 
-#### DashboardStatsDto
-
-```csharp
-public class DashboardStatsDto
-{
-    public int TotalInventoryItems { get; set; }
-    public int AvailableItems { get; set; }
-    public int AssignedItems { get; set; }
-    public int ExpiredItems { get; set; }
-    public int TotalUsers { get; set; }
-    public int ActiveUsers { get; set; }
-    public int NursePractitioners { get; set; }
-    public int TotalAssignments { get; set; }
-    public int ActiveAssignments { get; set; }
-    public int OverdueAssignments { get; set; }
-    public int ExpiringItemsCount { get; set; }
-    public int LowStockItemsCount { get; set; }
-    public decimal TotalInventoryValue { get; set; }
-}
-```
+`DashboardStatsDto` includes total/available/assigned/expiring/low-stock inventories, total users, active assignments, and overdue assignments.
 
 ---
 
-## Common DTOs
+## Common Outcome and DTO Types
 
-### 1. ApiResponse<T>
+### 1. Result / Result<T>
 
-**Purpose**: Standardized API response wrapper
+**Purpose**: Represents expected application service outcomes without throwing for normal business failures. Controllers map these outcomes to HTTP status codes while preserving the `ApiResponse<T>` response body.
+
+```csharp
+public enum ResultErrorType
+{
+    None, Failure, Validation, NotFound, Conflict, Unauthorized, Forbidden
+}
+
+public class Result
+{
+    public bool IsSuccess { get; }
+    public bool IsFailure => !IsSuccess;
+    public string Message { get; }
+    public ResultErrorType ErrorType { get; }
+    public IReadOnlyList<string> Errors { get; }
+
+    public static Result Success(string message = "Operation successful");
+    public static Result Failure(string message, IReadOnlyList<string>? errors = null);
+    public static Result NotFound(string message);
+    public static Result Conflict(string message);
+    public static Result Validation(string message, IReadOnlyList<string>? errors = null);
+    public static Result Unauthorized(string message);
+    public static Result Forbidden(string message);
+}
+
+public sealed class Result<T> : Result
+{
+    public T? Value { get; }
+}
+```
+
+**HTTP Mapping by `ApiControllerBase`:**
+
+| Result type | HTTP status |
+| ----------- | ----------- |
+| Success | 200 OK, or 201 Created via create-endpoint success factories |
+| NotFound | 404 Not Found |
+| Conflict | 409 Conflict |
+| Validation | 400 Bad Request |
+| Unauthorized | 401 Unauthorized |
+| Forbidden | 403 Forbidden |
+| Failure | 400 Bad Request |
+
+### 2. ApiResponse<T>
+
+**Purpose**: Standardized API response wrapper.
 
 ```csharp
 public class ApiResponse<T>
 {
     public bool IsSuccess { get; set; }
-    public T? Data { get; set; }
     public string Message { get; set; } = string.Empty;
+    public T? Data { get; set; }
     public List<string> Errors { get; set; } = new();
-
-    public static ApiResponse<T> Success(T data, string message = "Success")
-    {
-        return new ApiResponse<T>
-        {
-            IsSuccess = true,
-            Data = data,
-            Message = message
-        };
-    }
-
-    public static ApiResponse<T> Failure(string message, List<string>? errors = null)
-    {
-        return new ApiResponse<T>
-        {
-            IsSuccess = false,
-            Message = message,
-            Errors = errors ?? new List<string>()
-        };
-    }
 }
 ```
 
-### 2. PagedResult<T>
+### 3. PagedResult<T>
 
-**Purpose**: Pagination support for large datasets
+**Purpose**: Pagination support for large datasets.
 
 ```csharp
 public class PagedResult<T>
@@ -550,9 +351,54 @@ public class PagedResult<T>
     public int TotalCount { get; set; }
     public int PageNumber { get; set; }
     public int PageSize { get; set; }
-    public int TotalPages => (int)Math.Ceiling((double)TotalCount / PageSize);
-    public bool HasPreviousPage => PageNumber > 1;
-    public bool HasNextPage => PageNumber < TotalPages;
+    public int TotalPages { get; }
+    public bool HasNextPage { get; }
+    public bool HasPreviousPage { get; }
+}
+```
+
+---
+
+## Configuration Options and Security Abstractions
+
+### JwtOptions
+
+```csharp
+public sealed class JwtOptions
+{
+    public JwtKeySource KeySource { get; set; }
+    public string? Key { get; set; }
+    public string? KeySecretName { get; set; }
+    public string Issuer { get; set; } = string.Empty;
+    public string Audience { get; set; } = string.Empty;
+    public int AccessTokenMinutes { get; set; } = 60;
+    public int RefreshTokenDays { get; set; } = 7;
+    public int ClockSkewSeconds { get; set; } = 0;
+}
+public enum JwtKeySource { Inline, Environment, File, CloudSecret }
+```
+
+`JwtOptions` is the single source of truth for token creation and validation. The resolved key must be at least 256 bits.
+
+### Security Interfaces
+
+```csharp
+public interface ITokenService
+{
+    Task<AccessToken> CreateAccessTokenAsync(UserDto user, CancellationToken cancellationToken = default);
+    RefreshToken CreateRefreshToken();
+    string HashRefreshToken(string rawRefreshToken);
+}
+
+public interface IPasswordHasher
+{
+    string Hash(string password);
+    PasswordVerificationOutcome Verify(string hashedPassword, string providedPassword);
+}
+
+public interface ISecretClient
+{
+    Task<string?> GetSecretAsync(string secretName, CancellationToken cancellationToken = default);
 }
 ```
 
@@ -565,55 +411,9 @@ public class PagedResult<T>
 ```csharp
 public static class AuthConstants
 {
-    public static class Roles
-    {
-        public const string Admin = "Admin";
-        public const string NursePractitioner = "NursePractitioner";
-        public const string Staff = "Staff";
-    }
-
-    public static class Claims
-    {
-        public const string UserId = "userId";
-        public const string Email = "email";
-        public const string Name = "name";
-        public const string Role = "role";
-        public const string IsAdmin = "isAdmin";
-        public const string IsProvider = "isProvider";
-    }
-
-    public static class Policies
-    {
-        public const string AdminOnly = "AdminOnly";
-        public const string AdminOrProvider = "AdminOrProvider";
-        public const string AllRoles = "AllRoles";
-    }
-}
-```
-
-### 2. BusinessConstants
-
-```csharp
-public static class BusinessConstants
-{
-    public static class ExpiryAlert
-    {
-        public const int DefaultMonthsBefore = 3;
-        public const int MinMonthsBefore = 1;
-        public const int MaxMonthsBefore = 12;
-    }
-
-    public static class Inventory
-    {
-        public const int LowStockThreshold = 5;
-        public const int MaxQuantity = 10000;
-    }
-
-    public static class Pagination
-    {
-        public const int DefaultPageSize = 10;
-        public const int MaxPageSize = 100;
-    }
+    public static class Roles { public const string Admin = "Admin"; public const string NursePractitioner = "NursePractitioner"; public const string Staff = "Staff"; }
+    public static class Claims { public const string UserId = "userId"; public const string Email = "email"; public const string Name = "name"; public const string Role = "role"; public const string IsAdmin = "isAdmin"; public const string IsProvider = "isProvider"; }
+    public static class Policies { public const string AdminOnly = "AdminOnly"; public const string AdminOrProvider = "AdminOrProvider"; public const string AllRoles = "AllRoles"; }
 }
 ```
 
@@ -623,48 +423,32 @@ public static class BusinessConstants
 
 ### 1. IGenericRepository<T>
 
+The generic repository is read-optimized: reads default to `AsNoTracking`, filters/order/`Take` run in SQL, all async methods accept `CancellationToken`, and paging requires deterministic ordering.
+
 ```csharp
-public interface IGenericRepository<T> where T : BaseEntity
+public interface IGenericRepository<T> where T : class
 {
-    Task<T?> GetByIdAsync(int id);
-    Task<IEnumerable<T>> GetAllAsync();
-    Task<PagedResult<T>> GetPagedAsync(int pageNumber, int pageSize);
-    Task<T> AddAsync(T entity);
-    Task<T> UpdateAsync(T entity);
-    Task<bool> DeleteAsync(int id);
-    Task<bool> ExistsAsync(int id);
+    Task<T?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
+    Task<T?> FirstOrDefaultAsync(Expression<Func<T, bool>> predicate, Func<IQueryable<T>, IQueryable<T>>? include = null, bool asNoTracking = true, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<T>> ListAsync(Expression<Func<T, bool>>? predicate = null, Func<IQueryable<T>, IQueryable<T>>? include = null, Func<IQueryable<T>, IOrderedQueryable<T>>? orderBy = null, int? take = null, bool asNoTracking = true, CancellationToken cancellationToken = default);
+    Task<PagedList<T>> GetPagedAsync(int pageNumber, int pageSize, Func<IQueryable<T>, IOrderedQueryable<T>> orderBy, Expression<Func<T, bool>>? predicate = null, Func<IQueryable<T>, IQueryable<T>>? include = null, bool asNoTracking = true, CancellationToken cancellationToken = default);
 }
 ```
 
-### 2. Specialized Repository Interfaces
+### 2. IUnitOfWork
 
 ```csharp
-public interface IUserRepository : IGenericRepository<User>
+public interface IUnitOfWork
 {
-    Task<User?> GetByEmailAsync(string email);
-    Task<IEnumerable<User>> GetByRoleAsync(UserRole role);
-    Task<IEnumerable<User>> GetActiveUsersAsync();
-    Task<bool> EmailExistsAsync(string email);
-}
-
-public interface IInventoryRepository : IGenericRepository<Inventory>
-{
-    Task<Inventory?> GetByBarcodeAsync(string barcode);
-    Task<IEnumerable<Inventory>> GetByCategoryAsync(string category);
-    Task<IEnumerable<Inventory>> GetExpiringAsync(int monthsBefore);
-    Task<IEnumerable<Inventory>> GetLowStockAsync(int threshold);
-    Task<IEnumerable<Inventory>> SearchAsync(InventorySearchDto searchDto);
-}
-
-public interface IInventoryAssignmentRepository : IGenericRepository<InventoryAssignment>
-{
-    Task<IEnumerable<InventoryAssignment>> GetByUserIdAsync(int userId);
-    Task<IEnumerable<InventoryAssignment>> GetByInventoryIdAsync(int inventoryId);
-    Task<IEnumerable<InventoryAssignment>> GetActiveAssignmentsAsync();
-    Task<IEnumerable<InventoryAssignment>> GetOverdueAssignmentsAsync();
-    Task<AssignmentHistoryDto> GetAssignmentHistoryAsync(int inventoryId);
+    IUserRepository Users { get; }
+    IInventoryRepository Inventories { get; }
+    IInventoryAssignmentRepository InventoryAssignments { get; }
+    Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+    Task<TResult> ExecuteInTransactionAsync<TResult>(Func<CancellationToken, Task<TResult>> operation, CancellationToken cancellationToken = default);
 }
 ```
+
+`SaveChangesAsync` translates EF concurrency failures into `ConcurrencyConflictException`. The unit of work does not dispose the DI-owned `DbContext`.
 
 ---
 
@@ -693,82 +477,69 @@ public interface IInventoryAssignmentRepository : IGenericRepository<InventoryAs
                         InventoryDto  CreateInventoryDto
                        SearchDto     UpdateInventoryDto
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              RELATIONSHIP FLOWS                            │
-└─────────────────────────────────────────────────────────────────────────────┘
+User ──(1:M assigned to)──► InventoryAssignment ◄──(M:1)─── Inventory
+ │◄──(AssignedBy, optional)────────┘
+ │◄──(ReturnedTo, optional)────────┘
+ │──(1:M created)──────────────────► Inventory
 
-User ──(1:M)──► InventoryAssignment ◄──(M:1)─── Inventory
- │                      │
- │                      │
- │◄──(AssignedBy)──────┘
- │
- │◄──(ReturnedTo)──────┘
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                                ENUMS                                       │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-UserRole:                InventoryStatus:         AssignmentStatus:
-- Admin                  - Available              - Active
-- NursePractitioner      - Assigned               - Returned
-- Staff                  - Reserved               - Expired
-                         - Expired                - Lost
-                         - Damaged                - Damaged
-                         - Disposed
+IdempotentRequest is independent of BaseEntity and stores HTTP idempotency state.
 ```
 
 ---
 
 ## Domain Services Interfaces
 
-### Service Layer Interfaces (Domain Layer)
+Service methods accept `CancellationToken` values from controllers and return `Result<T>`. Expected validation/business outcomes use `Result<T>.Success/Failure/NotFound/Conflict/Validation/Unauthorized/Forbidden`; unhandled/domain exceptions are converted by the global exception handler.
 
 ```csharp
 public interface IAuthService
 {
-    Task<ApiResponse<AuthResponseDto>> LoginAsync(LoginDto loginDto);
-    Task<ApiResponse<AuthResponseDto>> RefreshTokenAsync(RefreshTokenDto refreshTokenDto);
-    Task<ApiResponse<bool>> LogoutAsync(int userId);
-    Task<ApiResponse<bool>> ChangePasswordAsync(int userId, ChangePasswordDto changePasswordDto);
-}
-
-public interface IUserService
-{
-    Task<ApiResponse<IEnumerable<UserDto>>> GetAllUsersAsync();
-    Task<ApiResponse<PagedResult<UserDto>>> GetUsersPagedAsync(int pageNumber, int pageSize);
-    Task<ApiResponse<UserDto>> GetUserByIdAsync(int id);
-    Task<ApiResponse<UserDto>> CreateUserAsync(CreateUserDto createUserDto);
-    Task<ApiResponse<UserDto>> UpdateUserAsync(int id, UpdateUserDto updateUserDto);
-    Task<ApiResponse<bool>> DeleteUserAsync(int id);
-}
-
-public interface IInventoryService
-{
-    Task<ApiResponse<IEnumerable<InventoryDto>>> GetAllInventoriesAsync();
-    Task<ApiResponse<PagedResult<InventoryDto>>> GetInventoriesPagedAsync(int pageNumber, int pageSize);
-    Task<ApiResponse<InventoryDto>> GetInventoryByIdAsync(int id);
-    Task<ApiResponse<InventoryDto>> CreateInventoryAsync(CreateInventoryDto createInventoryDto, int userId);
-    Task<ApiResponse<InventoryDto>> UpdateInventoryAsync(int id, UpdateInventoryDto updateInventoryDto);
-    Task<ApiResponse<bool>> DeleteInventoryAsync(int id);
-    Task<ApiResponse<IEnumerable<InventoryDto>>> GetExpiringInventoriesAsync(int monthsBefore);
-    Task<ApiResponse<IEnumerable<InventoryDto>>> GetLowStockInventoriesAsync(int threshold);
-}
-
-public interface IInventoryAssignmentService
-{
-    Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetAllAssignmentsAsync();
-    Task<ApiResponse<InventoryAssignmentDto>> CreateAssignmentAsync(CreateInventoryAssignmentDto createAssignmentDto, int assignedByUserId);
-    Task<ApiResponse<bool>> ReturnAssignmentAsync(ReturnInventoryAssignmentDto returnAssignmentDto, int returnedToUserId);
-    Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetOverdueAssignmentsAsync();
-}
-
-public interface IDashboardService
-{
-    Task<ApiResponse<DashboardStatsDto>> GetDashboardStatsAsync();
-    Task<ApiResponse<IEnumerable<InventoryDto>>> GetExpiryAlertsAsync();
-    Task<ApiResponse<IEnumerable<InventoryDto>>> GetLowStockAlertsAsync();
-    Task<ApiResponse<IEnumerable<InventoryAssignmentDto>>> GetOverdueAlertsAsync();
+    Task<Result<AuthResponseDto>> LoginAsync(LoginDto loginDto, CancellationToken cancellationToken = default);
+    Task<Result<AuthResponseDto>> RefreshTokenAsync(RefreshTokenDto refreshTokenDto, CancellationToken cancellationToken = default);
+    Task<Result<bool>> LogoutAsync(int userId, CancellationToken cancellationToken = default);
+    Task<Result<bool>> ChangePasswordAsync(int userId, ChangePasswordDto changePasswordDto, CancellationToken cancellationToken = default);
 }
 ```
 
-This domain model provides a comprehensive foundation with rich entities, proper relationships, comprehensive DTOs, and clear service interfaces that support all business requirements of the inventory management system.
+This domain model provides a secure foundation with clean layering, explicit `Result<T>` outcomes, validated DTOs, typed configuration, provider-agnostic concurrency, and explicit abstractions for data access, tokens, hashing, and secrets.
+
+---
+
+## Group 2 Additions (domain-agnostic backend extensions)
+
+These additions are **additive and non-breaking**: the legacy free-text `Inventory.Supplier`/`Inventory.Location` strings are retained, and every new column/entity is optional. New concepts use generic vocabulary so the backend stays any-industry.
+
+### New entities
+
+- **`StockMovement : BaseEntity`** — append-only ledger row. `InventoryId`, `MovementType` (`StockMovementType`), signed `QuantityChange`, `BalanceAfter` (available-qty snapshot), `Reason`, `Notes`, `UnitCost?`, and optional links `PerformedByUserId`, `AssignmentId`, `FromLocationId`, `ToLocationId`, `SupplierId`. Never edited/deleted after creation — it is the auditable lifecycle of an item.
+- **`Supplier : BaseEntity`** — `Name` (unique among non-deleted), `ContactName`, `Email`, `Phone`, `Address`, `Website`, `LeadTimeDays?`, `IsActive`, `Notes`, and an `Inventories` back-collection.
+- **`Location : BaseEntity`** — `Name`, `Code?` (unique among non-deleted when present), `Description`, `ParentLocationId?` (self-referencing hierarchy: site → room → shelf → bin), `IsActive`, `ParentLocation`/`ChildLocations`/`Inventories` navs.
+- **`MaintenanceSchedule : BaseEntity`** — `InventoryId`, `MaintenanceType`, `Title`, `Description?`, `IntervalDays?`, `LastPerformedAt?`, `NextDueAt`, `Status` (`MaintenanceStatus`), `PerformedByUserId?`, `Notes`.
+
+### Extended entities
+
+- **`Inventory`** — added `ReorderLevel?`, `ReorderQuantity?`, `SupplierId?` (+ `SupplierEntity` nav), `LocationId?` (+ `LocationEntity` nav), and `StockMovements`/`MaintenanceSchedules` collections.
+- **`InventoryAssignment`** — added `ReturnedQuantity` (partial returns), `RenewalCount` (renew/extend), `ReturnCondition?` (condition-on-return).
+
+### New enums
+
+```csharp
+public enum StockMovementType { Received = 1, Assigned, Returned, Adjusted, Transferred, Disposed }
+public enum MaintenanceType { Inspection = 1, Calibration, Service, Repair, Cleaning }
+public enum MaintenanceStatus { Scheduled = 1, Due, Overdue, Completed, Cancelled }
+public enum ReturnCondition { Good = 1, Damaged, Lost, NeedsRepair }
+```
+
+### New DTOs
+
+- **Stock:** `StockMovementDto`, `ReceiveStockDto`, `AdjustStockDto`, `DisposeStockDto`, `TransferStockDto`.
+- **Suppliers:** `SupplierDto`, `CreateSupplierDto`, `UpdateSupplierDto`.
+- **Locations:** `LocationDto`, `CreateLocationDto`, `UpdateLocationDto`.
+- **Maintenance:** `MaintenanceScheduleDto`, `CreateMaintenanceScheduleDto`, `UpdateMaintenanceScheduleDto`, `CompleteMaintenanceDto`.
+- **Assignments:** `InventoryAssignmentDto` gains `ReturnedQuantity`/`OutstandingQuantity`/`RenewalCount`/`ReturnCondition`; `ReturnInventoryAssignmentDto` gains `ReturnQuantity?`/`ReturnCondition?`; new `RenewInventoryAssignmentDto`.
+- **Inventory:** `InventoryDto` gains `ReorderLevel`/`ReorderQuantity`/`SupplierId`/`SupplierName`/`LocationId`/`LocationName`/`NeedsReorder` (computed); create/update DTOs gain the reorder + managed FK fields.
+
+### New repository & service contracts
+
+- Repositories: `IStockMovementRepository`, `ISupplierRepository`, `ILocationRepository`, `IMaintenanceScheduleRepository` (added to `IUnitOfWork`).
+- Services: `IStockService`, `ISupplierService`, `ILocationService`, `IMaintenanceService` — all return `Result<T>`; stock/return operations run inside `ExecuteInTransactionAsync` and append `StockMovement` rows.

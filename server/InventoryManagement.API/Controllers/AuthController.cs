@@ -1,0 +1,107 @@
+using InventoryManagement.API.Infrastructure;
+using InventoryManagement.Domain.Constants;
+using InventoryManagement.Domain.DTOs;
+using InventoryManagement.Domain.Interfaces;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+
+namespace InventoryManagement.API.Controllers;
+
+/// <summary>Authentication endpoints: login, token refresh, logout, password change and identity.</summary>
+[ApiController]
+[Route("api/[controller]")]
+[Produces("application/json")]
+public class AuthController : ApiControllerBase
+{
+    private readonly IAuthService _authService;
+    private readonly ILogger<AuthController> _logger;
+
+    /// <summary>Creates the controller.</summary>
+    public AuthController(IAuthService authService, ILogger<AuthController> logger)
+    {
+        _authService = authService;
+        _logger = logger;
+    }
+
+    /// <summary>Authenticates a user and returns access and refresh tokens.</summary>
+    /// <param name="loginDto">User login credentials.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    [HttpPost("login")]
+    [AllowAnonymous]
+    [EnableRateLimiting(ApiServiceCollectionExtensions.AuthRateLimitPolicy)]
+    public async Task<ActionResult<ApiResponse<AuthResponseDto>>> Login(
+        [FromBody] LoginDto loginDto,
+        CancellationToken cancellationToken
+    ) => HandleResult(await _authService.LoginAsync(loginDto, cancellationToken));
+
+    /// <summary>Exchanges a valid refresh token for a new token pair.</summary>
+    /// <param name="refreshTokenDto">The refresh token.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    [HttpPost("refresh")]
+    [AllowAnonymous]
+    [EnableRateLimiting(ApiServiceCollectionExtensions.AuthRateLimitPolicy)]
+    public async Task<ActionResult<ApiResponse<AuthResponseDto>>> RefreshToken(
+        [FromBody] RefreshTokenDto refreshTokenDto,
+        CancellationToken cancellationToken
+    ) => HandleResult(await _authService.RefreshTokenAsync(refreshTokenDto, cancellationToken));
+
+    /// <summary>Revokes the current user's refresh token.</summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    [HttpPost("logout")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<bool>>> Logout(CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return BadRequest(ApiResponse<bool>.Failure("Invalid user ID"));
+        }
+
+        return HandleResult(await _authService.LogoutAsync(userId, cancellationToken));
+    }
+
+    /// <summary>Changes the current user's password and revokes existing refresh tokens.</summary>
+    /// <param name="changePasswordDto">Current and new password.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    [HttpPost("change-password")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<bool>>> ChangePassword(
+        [FromBody] ChangePasswordDto changePasswordDto,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return BadRequest(ApiResponse<bool>.Failure("Invalid user ID"));
+        }
+
+        return HandleResult(
+            await _authService.ChangePasswordAsync(userId, changePasswordDto, cancellationToken)
+        );
+    }
+
+    /// <summary>Returns the identity, roles and permissions of the authenticated caller.</summary>
+    [HttpGet("me")]
+    [Authorize]
+    public ActionResult<ApiResponse<object>> GetCurrentUser()
+    {
+        var claims = new
+        {
+            UserId = User.FindFirst(AuthConstants.Claims.UserId)?.Value,
+            Email = User.FindFirst(AuthConstants.Claims.Email)?.Value,
+            Name = User.FindFirst(AuthConstants.Claims.Name)?.Value,
+            Tenant = User.FindFirst(AuthConstants.Claims.Tenant)?.Value,
+            Roles = User.FindAll(System.Security.Claims.ClaimTypes.Role)
+                .Select(c => c.Value)
+                .ToArray(),
+            Permissions = User.FindAll(AuthConstants.Claims.Permission)
+                .Select(c => c.Value)
+                .ToArray(),
+        };
+
+        return Ok(ApiResponse<object>.Success(claims, "Current user information retrieved"));
+    }
+
+    private bool TryGetUserId(out int userId) =>
+        int.TryParse(User.FindFirst(AuthConstants.Claims.UserId)?.Value, out userId);
+}

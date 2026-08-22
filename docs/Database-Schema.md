@@ -2,14 +2,15 @@
 
 ## Overview
 
-This document provides a comprehensive overview of the database schema, including table structures, relationships, constraints, and data flow patterns.
+This document provides a comprehensive overview of the database schema, including table structures, relationships, constraints, idempotency storage, optimistic concurrency, secure authentication storage, and data flow patterns. API-layer `Result<T>` outcomes map database conflicts/not-found cases to accurate HTTP status codes while preserving the `ApiResponse<T>` body.
 
 ## Database Technology
 
 - **Database Engine**: SQLite
-- **File Location**: `src/InventoryManagement.Infrastructure/inventory.db`
-- **ORM**: Entity Framework Core 9.0
+- **Development File Location**: `server\InventoryManagement.Infrastructure\inventory.db`
+- **ORM**: Entity Framework Core
 - **Migration Support**: Yes (Code-First approach)
+- **Concurrency Strategy**: Provider-agnostic GUID `ConcurrencyToken` configured as an EF concurrency token
 
 ---
 
@@ -17,107 +18,119 @@ This document provides a comprehensive overview of the database schema, includin
 
 ### 1. Users Table
 
-**Purpose**: Stores user accounts with role-based access control
+**Purpose**: Stores user accounts with role-based access control and hashed authentication material.
 
-| Column                 | Type          | Constraints           | Description                             |
-| ---------------------- | ------------- | --------------------- | --------------------------------------- |
-| Id                     | INTEGER       | PRIMARY KEY, IDENTITY | Auto-incrementing user identifier       |
-| Email                  | NVARCHAR(256) | NOT NULL, UNIQUE      | User's email address (login identifier) |
-| PasswordHash           | NVARCHAR(500) | NOT NULL              | BCrypt hashed password                  |
-| Name                   | NVARCHAR(200) | NOT NULL              | Full name of the user                   |
-| Role                   | NVARCHAR(50)  | NOT NULL              | Role: Admin, NursePractitioner, Staff   |
-| IsAdmin                | BIT           | NOT NULL              | Quick admin check flag                  |
-| IsProvider             | BIT           | NOT NULL              | Quick provider (NP) check flag          |
-| IsActive               | BIT           | NOT NULL              | Soft delete flag                        |
-| RefreshToken           | NVARCHAR(500) | NULL                  | JWT refresh token                       |
-| RefreshTokenExpiryTime | DATETIME2     | NULL                  | Refresh token expiration                |
-| CreatedAt              | DATETIME2     | NOT NULL              | Record creation timestamp               |
-| UpdatedAt              | DATETIME2     | NOT NULL              | Last update timestamp                   |
-| CreatedBy              | NVARCHAR(100) | NULL                  | User who created the record             |
-| UpdatedBy              | NVARCHAR(100) | NULL                  | User who last updated the record        |
+| Column                 | Type          | Constraints           | Description                                                |
+| ---------------------- | ------------- | --------------------- | ---------------------------------------------------------- |
+| Id                     | INTEGER       | PRIMARY KEY, IDENTITY | Auto-incrementing user identifier                          |
+| Name                   | NVARCHAR(100) | NOT NULL              | Full/display name of the user                              |
+| Email                  | NVARCHAR(256) | NOT NULL, UNIQUE      | User's email address (login identifier)                    |
+| PasswordHash           | NVARCHAR      | NOT NULL              | Microsoft `PasswordHasher` PBKDF2-HMAC-SHA256 hash         |
+| IsAdmin                | BIT           | NOT NULL              | Admin privilege flag                                       |
+| IsProvider             | BIT           | NOT NULL              | Provider/Nurse Practitioner privilege flag                 |
+| Role                   | NVARCHAR(50)  | NOT NULL              | Role: Admin, NursePractitioner, Staff                      |
+| IsActive               | BIT           | NOT NULL              | Account enabled/disabled flag                              |
+| LastLoginAt            | DATETIME      | NULL                  | Last successful login timestamp                            |
+| RefreshToken           | NVARCHAR      | NULL                  | SHA-256 hash of refresh token; never the raw token          |
+| RefreshTokenExpiryTime | DATETIME      | NULL                  | Refresh token expiration                                   |
+| CreatedAt              | DATETIME      | NOT NULL              | Record creation timestamp                                  |
+| UpdatedAt              | DATETIME      | NULL                  | Last update timestamp                                      |
+| CreatedBy              | NVARCHAR      | NULL                  | User/system that created the record                        |
+| UpdatedBy              | NVARCHAR      | NULL                  | User/system that last updated the record                   |
+| IsDeleted              | BIT           | NOT NULL              | Soft-delete flag                                           |
+| DeletedAt              | DATETIME      | NULL                  | Soft-delete timestamp                                      |
+| DeletedBy              | NVARCHAR      | NULL                  | User/system that soft-deleted the record                   |
+| ConcurrencyToken       | TEXT          | NOT NULL              | EF concurrency token rotated on every insert/update        |
 
 **Indexes:**
 
 - `IX_Users_Email` (UNIQUE)
-- `IX_Users_Role`
-- `IX_Users_IsActive`
+- Role/activity indexes as configured for common lookups
 
 **Sample Data:**
 
 ```sql
-INSERT INTO Users (Email, PasswordHash, Name, Role, IsAdmin, IsProvider, IsActive, CreatedAt, UpdatedAt)
-VALUES ('admin@inventorymanagement.com', '$2a$11$hash...', 'System Administrator', 'Admin', 1, 0, 1, GETDATE(), GETDATE());
+INSERT INTO Users (Email, PasswordHash, Name, Role, IsAdmin, IsProvider, IsActive, CreatedAt, ConcurrencyToken)
+VALUES ('admin@inventorymanagement.com', '<PBKDF2 hash>', 'System Administrator', 'Admin', 1, 0, 1, CURRENT_TIMESTAMP, '<guid>');
 ```
+
+Seeded admin email defaults to `admin@inventorymanagement.com`. Local Development password is `ChangeMe_LocalDev!2026`; production should configure `SeedData:AdminPassword` or use the generated password logged once at startup.
 
 ---
 
 ### 2. Inventories Table
 
-**Purpose**: Stores medical equipment and supplies inventory
+**Purpose**: Stores medical equipment and supplies inventory.
 
-| Column        | Type           | Constraints           | Description                                               |
-| ------------- | -------------- | --------------------- | --------------------------------------------------------- |
-| Id            | INTEGER        | PRIMARY KEY, IDENTITY | Auto-incrementing inventory identifier                    |
-| EquipmentName | NVARCHAR(200)  | NOT NULL              | Name of the equipment                                     |
-| Description   | NVARCHAR(1000) | NULL                  | Detailed description                                      |
-| Category      | NVARCHAR(100)  | NOT NULL              | Equipment category                                        |
-| Manufacturer  | NVARCHAR(100)  | NULL                  | Manufacturer name                                         |
-| Model         | NVARCHAR(100)  | NULL                  | Model number/name                                         |
-| SerialNumber  | NVARCHAR(100)  | NULL, UNIQUE          | Serial number (where applicable)                          |
-| Barcode       | NVARCHAR(50)   | NULL, UNIQUE          | Barcode for scanning                                      |
-| Quantity      | INTEGER        | NOT NULL, CHECK >= 0  | Current quantity in stock                                 |
-| UnitCost      | DECIMAL(18,2)  | NOT NULL, CHECK >= 0  | Cost per unit                                             |
-| ExpiryDate    | DATETIME2      | NULL                  | Expiration date (if applicable)                           |
-| Status        | NVARCHAR(50)   | NOT NULL              | Available, Assigned, Reserved, Expired, Damaged, Disposed |
-| Location      | NVARCHAR(200)  | NULL                  | Storage location                                          |
-| Notes         | NVARCHAR(1000) | NULL                  | Additional notes                                          |
-| IsActive      | BIT            | NOT NULL              | Soft delete flag                                          |
-| CreatedAt     | DATETIME2      | NOT NULL              | Record creation timestamp                                 |
-| UpdatedAt     | DATETIME2      | NOT NULL              | Last update timestamp                                     |
-| CreatedBy     | NVARCHAR(100)  | NULL                  | User who created the record                               |
-| UpdatedBy     | NVARCHAR(100)  | NULL                  | User who last updated the record                          |
+| Column             | Type           | Constraints           | Description                                               |
+| ------------------ | -------------- | --------------------- | --------------------------------------------------------- |
+| Id                 | INTEGER        | PRIMARY KEY, IDENTITY | Auto-incrementing inventory identifier                    |
+| EquipmentName      | NVARCHAR(200)  | NOT NULL              | Name of the equipment                                     |
+| Description        | NVARCHAR(1000) | NULL                  | Detailed description                                      |
+| Category           | NVARCHAR(100)  | NULL                  | Equipment category                                        |
+| Brand              | NVARCHAR(100)  | NULL                  | Brand/manufacturer name                                   |
+| Model              | NVARCHAR(100)  | NULL                  | Model number/name                                         |
+| SerialNumber       | NVARCHAR(50)   | NULL, UNIQUE          | Serial number (where applicable)                          |
+| Barcode            | NVARCHAR(50)   | NULL, UNIQUE          | Barcode for scanning                                      |
+| ExpiryDate         | DATETIME       | NULL                  | Expiration date (if applicable)                           |
+| ManufactureDate    | DATETIME       | NULL                  | Manufacture date                                          |
+| PurchasePrice      | DECIMAL        | NULL, CHECK >= 0      | Purchase price                                            |
+| Supplier           | NVARCHAR(200)  | NULL                  | Supplier name                                             |
+| Quantity           | INTEGER        | NOT NULL, CHECK >= 0  | Total quantity owned                                      |
+| AvailableQuantity  | INTEGER        | NOT NULL, CHECK >= 0  | Quantity available for assignment                         |
+| Status             | NVARCHAR(50)   | NOT NULL              | Available, Assigned, Reserved, Expired, Damaged, Disposed |
+| Location           | NVARCHAR(200)  | NULL                  | Storage location                                          |
+| Notes              | NVARCHAR(1000) | NULL                  | Additional notes                                          |
+| IsExpiryAlertSent  | BIT            | NOT NULL              | Prevents duplicate expiry alert notifications             |
+| CreatedByUserId    | INTEGER        | NULL, FOREIGN KEY     | User who created the inventory item                       |
+| CreatedAt          | DATETIME       | NOT NULL              | Record creation timestamp                                 |
+| UpdatedAt          | DATETIME       | NULL                  | Last update timestamp                                     |
+| CreatedBy          | NVARCHAR       | NULL                  | User/system that created the record                       |
+| UpdatedBy          | NVARCHAR       | NULL                  | User/system that last updated the record                  |
+| IsDeleted          | BIT            | NOT NULL              | Soft-delete flag                                          |
+| DeletedAt          | DATETIME       | NULL                  | Soft-delete timestamp                                     |
+| DeletedBy          | NVARCHAR       | NULL                  | User/system that soft-deleted the record                  |
+| ConcurrencyToken   | TEXT           | NOT NULL              | EF concurrency token rotated on every insert/update       |
 
 **Indexes:**
 
-- `IX_Inventories_Barcode` (UNIQUE, WHERE Barcode IS NOT NULL)
-- `IX_Inventories_SerialNumber` (UNIQUE, WHERE SerialNumber IS NOT NULL)
-- `IX_Inventories_Category`
-- `IX_Inventories_Status`
-- `IX_Inventories_ExpiryDate`
-- `IX_Inventories_IsActive`
+- Unique filtered indexes for `Barcode` and `SerialNumber` when present/non-deleted
+- Category/status/date indexes for filtering and dashboard alerts
 
 **Check Constraints:**
 
-- `CK_Inventories_Quantity_NonNegative`: Quantity >= 0
-- `CK_Inventories_UnitCost_NonNegative`: UnitCost >= 0
+- Quantity and available quantity cannot be negative
+- Purchase price cannot be negative
+- Application layer enforces `0 <= AvailableQuantity <= Quantity`
 
 ---
 
 ### 3. InventoryAssignments Table
 
-**Purpose**: Tracks equipment assignments to users with complete audit trail
+**Purpose**: Tracks equipment assignments to users with complete audit trail.
 
 | Column             | Type           | Constraints           | Description                              |
 | ------------------ | -------------- | --------------------- | ---------------------------------------- |
 | Id                 | INTEGER        | PRIMARY KEY, IDENTITY | Auto-incrementing assignment identifier  |
 | InventoryId        | INTEGER        | NOT NULL, FOREIGN KEY | Reference to Inventories.Id              |
-| UserId             | INTEGER        | NOT NULL, FOREIGN KEY | Reference to Users.Id                    |
-| AssignedByUserId   | INTEGER        | NOT NULL, FOREIGN KEY | User who made the assignment             |
-| QuantityAssigned   | INTEGER        | NOT NULL, CHECK > 0   | Quantity assigned                        |
-| AssignedDate       | DATETIME2      | NOT NULL              | When assignment was made                 |
-| ExpectedReturnDate | DATETIME2      | NULL                  | Expected return date                     |
+| UserId             | INTEGER        | NOT NULL, FOREIGN KEY | Reference to recipient Users.Id          |
+| AssignedQuantity   | INTEGER        | NOT NULL, CHECK > 0   | Quantity assigned                        |
+| AssignedDate       | DATETIME       | NOT NULL              | When assignment was made                 |
+| ReturnDate         | DATETIME       | NULL                  | When returned                            |
+| ExpectedReturnDate | DATETIME       | NULL                  | Expected return date                     |
 | Status             | NVARCHAR(50)   | NOT NULL              | Active, Returned, Expired, Lost, Damaged |
-| Notes              | NVARCHAR(1000) | NULL                  | Assignment notes                         |
-| QuantityReturned   | INTEGER        | NULL, CHECK >= 0      | Quantity returned (when applicable)      |
-| ActualReturnDate   | DATETIME2      | NULL                  | When actually returned                   |
-| ReturnedToUserId   | INTEGER        | NULL, FOREIGN KEY     | User who processed return                |
-| ReturnCondition    | NVARCHAR(100)  | NULL                  | Condition when returned                  |
+| AssignmentNotes    | NVARCHAR(1000) | NULL                  | Assignment notes                         |
 | ReturnNotes        | NVARCHAR(1000) | NULL                  | Return notes                             |
-| IsActive           | BIT            | NOT NULL              | Soft delete flag                         |
-| CreatedAt          | DATETIME2      | NOT NULL              | Record creation timestamp                |
-| UpdatedAt          | DATETIME2      | NOT NULL              | Last update timestamp                    |
-| CreatedBy          | NVARCHAR(100)  | NULL                  | User who created the record              |
-| UpdatedBy          | NVARCHAR(100)  | NULL                  | User who last updated the record         |
+| AssignedByUserId   | INTEGER        | NULL, FOREIGN KEY     | User who made the assignment             |
+| ReturnedToUserId   | INTEGER        | NULL, FOREIGN KEY     | User who processed return                |
+| CreatedAt          | DATETIME       | NOT NULL              | Record creation timestamp                |
+| UpdatedAt          | DATETIME       | NULL                  | Last update timestamp                    |
+| CreatedBy          | NVARCHAR       | NULL                  | User/system that created the record      |
+| UpdatedBy          | NVARCHAR       | NULL                  | User/system that last updated the record |
+| IsDeleted          | BIT            | NOT NULL              | Soft-delete flag                         |
+| DeletedAt          | DATETIME       | NULL                  | Soft-delete timestamp                    |
+| DeletedBy          | NVARCHAR       | NULL                  | User/system that soft-deleted the record |
+| ConcurrencyToken   | TEXT           | NOT NULL              | EF concurrency token rotated on update   |
 
 **Indexes:**
 
@@ -125,15 +138,39 @@ VALUES ('admin@inventorymanagement.com', '$2a$11$hash...', 'System Administrator
 - `IX_InventoryAssignments_UserId`
 - `IX_InventoryAssignments_AssignedByUserId`
 - `IX_InventoryAssignments_ReturnedToUserId`
-- `IX_InventoryAssignments_Status`
-- `IX_InventoryAssignments_AssignedDate`
-- `IX_InventoryAssignments_ExpectedReturnDate`
-- `IX_InventoryAssignments_IsActive`
+- Status/date indexes for active, overdue, history, and recent queries
 
 **Check Constraints:**
 
-- `CK_InventoryAssignments_QuantityAssigned_Positive`: QuantityAssigned > 0
-- `CK_InventoryAssignments_QuantityReturned_NonNegative`: QuantityReturned >= 0
+- `AssignedQuantity > 0`
+
+---
+
+### 4. IdempotentRequests Table
+
+**Purpose**: Stores idempotency locks and cached responses for retry-safe mutating requests.
+
+| Column              | Type           | Constraints             | Description                                             |
+| ------------------- | -------------- | ----------------------- | ------------------------------------------------------- |
+| IdempotencyKey      | NVARCHAR(512)  | PRIMARY KEY             | Client-supplied idempotency key                         |
+| RequestMethod       | NVARCHAR(10)   | NOT NULL                | Original HTTP method                                    |
+| RequestPath         | NVARCHAR(500)  | NOT NULL                | Original request path                                   |
+| RequestHash         | NVARCHAR(64)   | NULL                    | SHA-256 hex hash of request body                        |
+| ResponseStatusCode  | INTEGER        | NOT NULL                | Captured response status code; 0 while in progress      |
+| ResponseBody        | NVARCHAR       | NULL, MAX 1048576 chars | Captured response body when cacheable                   |
+| ResponseContentType | NVARCHAR(100)  | NULL                    | Captured content type                                   |
+| CreatedAt           | DATETIME       | NOT NULL                | Lock creation timestamp                                 |
+| CompletedAt         | DATETIME       | NULL                    | Response completion timestamp                           |
+| LockExpiresAt       | DATETIME       | NOT NULL                | Abandoned-lock reclaim deadline                         |
+| ExpiresAt           | DATETIME       | NULL                    | Completed response retention deadline                   |
+| IsCompleted         | BIT            | NOT NULL                | Whether response was captured                           |
+
+**Indexes:**
+
+- `IX_IdempotentRequests_LockExpiresAt`
+- `IX_IdempotentRequests_ExpiresAt`
+
+The old `IX_IdempotentRequests_CreatedAt` index was dropped. The middleware's `Idempotency:MaxKeyLength` default is 100, even though the column allows up to 512.
 
 ---
 
@@ -146,8 +183,7 @@ FOREIGN KEY (InventoryId) REFERENCES Inventories(Id)
 ON DELETE RESTRICT
 ```
 
-- **Relationship**: Many-to-One (Many assignments can reference one inventory item)
-- **Delete Behavior**: RESTRICT (Cannot delete inventory with active assignments)
+- **Relationship**: Many-to-One
 - **Navigation**: `InventoryAssignment.Inventory` ← `Inventory.Assignments`
 
 ### 2. InventoryAssignments → Users (Assigned User)
@@ -157,31 +193,25 @@ FOREIGN KEY (UserId) REFERENCES Users(Id)
 ON DELETE RESTRICT
 ```
 
-- **Relationship**: Many-to-One (Many assignments can be made to one user)
-- **Delete Behavior**: RESTRICT (Cannot delete user with active assignments)
-- **Navigation**: `InventoryAssignment.User` ← `User.Assignments`
+- **Relationship**: Many-to-One
+- **Navigation**: `InventoryAssignment.User` ← `User.AssignedInventories`
 
-### 3. InventoryAssignments → Users (Assigned By User)
+### 3. InventoryAssignments → Users (Assigned By / Returned To)
 
 ```sql
-FOREIGN KEY (AssignedByUserId) REFERENCES Users(Id)
-ON DELETE RESTRICT
+FOREIGN KEY (AssignedByUserId) REFERENCES Users(Id) ON DELETE SET NULL
+FOREIGN KEY (ReturnedToUserId) REFERENCES Users(Id) ON DELETE SET NULL
 ```
 
-- **Relationship**: Many-to-One (Many assignments can be made by one user)
-- **Delete Behavior**: RESTRICT (Maintains audit trail)
-- **Navigation**: `InventoryAssignment.AssignedByUser` ← `User.AssignmentsMade`
+- **Relationship**: Many-to-One
+- **Delete Behavior**: SET NULL where configured to preserve assignment records
 
-### 4. InventoryAssignments → Users (Returned To User)
+### 4. Inventories → Users (Created By User)
 
 ```sql
-FOREIGN KEY (ReturnedToUserId) REFERENCES Users(Id)
+FOREIGN KEY (CreatedByUserId) REFERENCES Users(Id)
 ON DELETE SET NULL
 ```
-
-- **Relationship**: Many-to-One (Many returns can be processed by one user)
-- **Delete Behavior**: SET NULL (Return processing record preserved)
-- **Navigation**: `InventoryAssignment.ReturnedToUser` ← `User.ReturnsProcessed`
 
 ---
 
@@ -193,30 +223,27 @@ ON DELETE SET NULL
 ├─────────────────┤         ├─────────────────────┤         ├─────────────────┤
 │ Id (PK)         │◄───────┤│ UserId (FK)         │├───────►│ Id (PK)         │
 │ Email (UNIQUE)  │         │ AssignedByUserId(FK)│         │ EquipmentName   │
-│ PasswordHash    │         │ ReturnedToUserId(FK)│         │ Description     │
-│ Name            │         │ InventoryId (FK)    │         │ Category        │
-│ Role            │         │ QuantityAssigned    │         │ Manufacturer    │
-│ IsAdmin         │         │ AssignedDate        │         │ Model           │
-│ IsProvider      │         │ ExpectedReturnDate  │         │ SerialNumber    │
-│ IsActive        │         │ Status              │         │ Barcode (UNIQUE)│
-│ RefreshToken    │         │ QuantityReturned    │         │ Quantity        │
-│ RefreshTokenExp │         │ ActualReturnDate    │         │ UnitCost        │
-│ CreatedAt       │         │ ReturnCondition     │         │ ExpiryDate      │
-│ UpdatedAt       │         │ Notes               │         │ Status          │
-│ CreatedBy       │         │ ReturnNotes         │         │ Location        │
-│ UpdatedBy       │         │ IsActive            │         │ Notes           │
-└─────────────────┘         │ CreatedAt           │         │ IsActive        │
-                            │ UpdatedAt           │         │ CreatedAt       │
-                            │ CreatedBy           │         │ UpdatedAt       │
-                            │ UpdatedBy           │         │ CreatedBy       │
-                            └─────────────────────┘         │ UpdatedBy       │
+│ PasswordHash    │         │ ReturnedToUserId(FK)│         │ Category        │
+│ Role/Flags      │         │ InventoryId (FK)    │         │ Brand           │
+│ RefreshToken(*) │         │ AssignedQuantity    │         │ Serial/Barcode  │
+│ IsDeleted       │         │ Status              │         │ Quantity        │
+│ ConcurrencyToken│         │ ConcurrencyToken    │         │ AvailableQty    │
+└─────────────────┘         └─────────────────────┘         │ ConcurrencyToken│
                                                             └─────────────────┘
 
-Relationships:
-1. Users(Id) ← InventoryAssignments(UserId) [1:M]
-2. Users(Id) ← InventoryAssignments(AssignedByUserId) [1:M]
-3. Users(Id) ← InventoryAssignments(ReturnedToUserId) [1:M]
-4. Inventories(Id) ← InventoryAssignments(InventoryId) [1:M]
+(*) RefreshToken stores a SHA-256 hash, not the raw refresh token.
+
+┌────────────────────────┐
+│   IdempotentRequests   │
+├────────────────────────┤
+│ IdempotencyKey (PK)    │
+│ RequestMethod/Path     │
+│ RequestHash            │
+│ ResponseStatusCode     │
+│ CreatedAt/CompletedAt  │
+│ LockExpiresAt/ExpiresAt│
+│ IsCompleted            │
+└────────────────────────┘
 ```
 
 ---
@@ -226,83 +253,67 @@ Relationships:
 ### 1. User Registration Flow
 
 ```
-Admin → Create User → Hash Password → Store in Users table
-                   ↓
-            Set appropriate Role/IsAdmin/IsProvider flags
+Admin → Create User → Validate DTO → Hash Password (Microsoft PBKDF2) → Store Users row
 ```
 
-### 2. Inventory Creation Flow
+### 2. Authentication Flow
 
 ```
-Admin/Provider → Create Inventory → Validate uniqueness (Barcode/Serial)
-                                  ↓
-                            Store in Inventories table
-                                  ↓
-                            Set Status = "Available"
+Login → Verify password hash → Create access token using JwtOptions
+      → Create raw refresh token → Store SHA-256 refresh-token hash
+      → Return raw refresh token to client once
 ```
 
 ### 3. Assignment Flow
 
 ```
-Admin/Provider → Create Assignment → Validate quantity availability
-                                   ↓
-                            Check inventory status != "Expired"
-                                   ↓
-                            Create InventoryAssignments record
-                                   ↓
-                            Update Inventory quantity (if tracking)
-                                   ↓
-                            Set Assignment status = "Active"
+Admin/Provider → ExecuteInTransactionAsync → Validate inventory/user/quantity
+                                           ↓
+                                    Create InventoryAssignments record
+                                           ↓
+                                    Decrease AvailableQuantity
+                                           ↓
+                                    Save with ConcurrencyToken check
 ```
 
-### 4. Return Flow
+Concurrent conflicting updates raise a concurrency exception and return HTTP 409 instead of silently overselling; duplicate email/barcode/serial conflicts are also surfaced as 409 by the Result mapping layer.
+
+### 4. Idempotency Flow
 
 ```
-Admin/Provider → Process Return → Validate assignment exists
-                                ↓
-                        Update InventoryAssignments:
-                        - QuantityReturned
-                        - ActualReturnDate
-                        - ReturnCondition
-                        - Status = "Returned"
-                                ↓
-                        Update Inventory quantity (add back)
-```
-
-### 5. Audit Trail Flow
-
-```
-Any Entity Update → Update audit fields:
-                   - UpdatedAt = GETDATE()
-                   - UpdatedBy = Current User
-                   ↓
-            Maintain complete history via timestamps
+Mutating request + Idempotency-Key → Authenticate first → Hash request body
+                                  ↓
+       409 if in progress | 422 if key reused with different request
+                                  ↓
+                      Cache bounded response or stream too-large body
+                                  ↓
+                      Replay completed response with Idempotency-Replayed: true
 ```
 
 ---
 
-## Business Rules Enforced by Database
+## Business Rules Enforced by Database and Application
 
 ### 1. Data Integrity Rules
 
 - **Email Uniqueness**: Each user must have a unique email address
-- **Barcode Uniqueness**: Each inventory item with a barcode must be unique
-- **Serial Number Uniqueness**: Each inventory item with a serial number must be unique
+- **Barcode/Serial Uniqueness**: Each non-deleted inventory item with a barcode/serial must be unique
 - **Non-negative Quantities**: Inventory quantities cannot be negative
 - **Positive Assignment Quantities**: Cannot assign zero or negative quantities
+- **Concurrency Tokens**: Updates include the original `ConcurrencyToken`, preventing lost updates
 
-### 2. Referential Integrity Rules
+### 2. Security Rules
 
-- **Cannot delete users with active assignments**
-- **Cannot delete inventory items with active assignments**
-- **Assignment must reference valid inventory and user**
-- **Assignment audit trail preserved (AssignedBy/ReturnedTo users)**
+- **PasswordHash** stores Microsoft PBKDF2 hashes only
+- **RefreshToken** stores SHA-256 hashes only
+- **JWT signing key** is not stored in the database and must be supplied through `Jwt` configuration/secrets
+- **Auth idempotency exclusion** prevents token responses from being cached/replayed
 
 ### 3. Soft Delete Implementation
 
-- **IsActive flag** on all tables prevents hard deletes
-- **Maintains historical data** for auditing and reporting
-- **Filters in queries** automatically exclude inactive records
+- **IsDeleted flag** on `BaseEntity` tables prevents hard deletes for domain entities
+- **DeletedAt/DeletedBy** keep deletion audit data
+- **Global query filters** exclude soft-deleted rows automatically
 
 ---
 
@@ -310,56 +321,50 @@ Any Entity Update → Update audit fields:
 
 ### 1. Index Strategy
 
-- **Primary Keys**: Clustered indexes for fast lookups
-- **Foreign Keys**: Non-clustered indexes for join performance
-- **Unique Constraints**: Automatic indexes for uniqueness checks
-- **Status Fields**: Indexes for common filtering operations
-- **Date Fields**: Indexes for date range queries (expiry alerts)
+- **Primary Keys**: Fast entity lookup
+- **Foreign Keys**: Join performance
+- **Unique Constraints**: Email, barcode, serial-number checks
+- **Status/Date Fields**: Common filtering for alerts and assignment history
+- **Idempotency Expiry Indexes**: Efficient stale-lock and retention cleanup
 
 ### 2. Query Optimization Patterns
 
-- **Pagination**: Uses OFFSET/FETCH for large result sets
-- **Filtered Indexes**: Unique constraints with WHERE clauses
-- **Selective Queries**: Always include IsActive = 1 filter
-- **Date Range Queries**: Optimized for expiry and assignment date filtering
-
-### 3. Connection Management
-
-- **DbContext Scoped**: Per request in API
-- **Connection Pooling**: Automatic via Entity Framework
-- **Transaction Management**: Unit of Work pattern for consistency
+- **AsNoTracking Reads**: Repositories default to no tracking for read paths
+- **Deterministic Pagination**: Mandatory `OrderBy` before `Skip/Take`
+- **SQL-Side Filtering**: Search, ordering, paging, and `Take` are pushed into EF queries
+- **Sequential Dashboard Aggregates**: Avoids concurrent operations on one scoped DbContext
 
 ---
 
 ## Migration and Versioning
 
-### 1. Current Migration
+### 1. Current Security/Architecture Migration
 
-- **Initial Migration**: Creates all tables with relationships
-- **Seed Data**: Admin user creation
-- **Indexes**: All performance indexes created
+- **Migration**: `SecurityAndConcurrencyHardening`
+- **Added**: `ConcurrencyToken` to Users, Inventories, InventoryAssignments
+- **Added**: `RequestHash`, `CompletedAt`, `LockExpiresAt`, `ExpiresAt` to IdempotentRequests
+- **Added Indexes**: `IX_IdempotentRequests_LockExpiresAt`, `IX_IdempotentRequests_ExpiresAt`
+- **Configured Limits**: `IdempotencyKey` max 512 and `ResponseBody` max 1048576 characters at the EF model layer
+- **Dropped Index**: `IX_IdempotentRequests_CreatedAt`
 
 ### 2. Migration Commands
 
-```bash
+```powershell
 # Add new migration
-dotnet ef migrations add MigrationName --project src/InventoryManagement.Infrastructure
+dotnet ef migrations add MigrationName --project server\InventoryManagement.Infrastructure --startup-project server\InventoryManagement.API
 
 # Update database
-dotnet ef database update --project src/InventoryManagement.Infrastructure
+dotnet ef database update --project server\InventoryManagement.Infrastructure --startup-project server\InventoryManagement.API
 
 # Generate SQL script
-dotnet ef migrations script --project src/InventoryManagement.Infrastructure
+dotnet ef migrations script --project server\InventoryManagement.Infrastructure --startup-project server\InventoryManagement.API
 ```
 
 ### 3. Database Backup/Restore
 
-```bash
-# Backup SQLite database
-cp src/InventoryManagement.Infrastructure/inventory.db backup/inventory_backup_$(date +%Y%m%d).db
-
-# Restore from backup
-cp backup/inventory_backup_20240101.db src/InventoryManagement.Infrastructure/inventory.db
+```powershell
+Copy-Item server\InventoryManagement.Infrastructure\inventory.db backup\inventory_backup_20260813.db
+Copy-Item backup\inventory_backup_20260813.db server\InventoryManagement.Infrastructure\inventory.db
 ```
 
 ---
@@ -369,23 +374,61 @@ cp backup/inventory_backup_20240101.db src/InventoryManagement.Infrastructure/in
 ### 1. Database Statistics
 
 - **Record Counts**: Monitor growth patterns
-- **Index Usage**: Identify unused indexes
-- **Query Performance**: Log slow queries via Serilog
-- **Integrity Checks**: Regular constraint validation
+- **Idempotency Rows**: Cleanup service purges expired rows in bounded batches
+- **Query Performance**: Log slow queries via Serilog/EF logging configuration
 
 ### 2. Maintenance Tasks
 
-- **Cleanup Old Refresh Tokens**: Remove expired tokens
-- **Archive Completed Assignments**: Move old assignments to archive table
-- **Reindex Operations**: Rebuild indexes if performance degrades
+- **Cleanup Expired Idempotency Records**: Automated by `IdempotencyCleanupService`
+- **Refresh Token Hygiene**: Logout and password change revoke current refresh tokens
 - **Backup Schedule**: Regular automated backups
 
 ### 3. Health Checks
 
-```csharp
-// Connection health check
-services.AddHealthChecks()
-    .AddDbContextCheck<AppDbContext>();
+```http
+GET /health
 ```
 
-This database schema provides a robust foundation for the inventory management system with proper relationships, constraints, and performance optimizations.
+This database schema provides a robust foundation with relationships, optimistic concurrency, idempotency safety, and performance optimizations.
+
+---
+
+## Group 2 Additions (stock ledger, suppliers, locations, maintenance)
+
+Migration: `AddGroup2StockSupplierLocationMaintenance` (applied on startup via `MigrateAsync`). All changes are **additive** — existing tables/columns are unchanged and the legacy free-text `Inventories.Supplier`/`Inventories.Location` columns are retained.
+
+### New columns on existing tables
+
+- **Inventories:** `ReorderLevel` (INTEGER NULL), `ReorderQuantity` (INTEGER NULL), `SupplierId` (INTEGER NULL, FK → Suppliers, ON DELETE RESTRICT), `LocationId` (INTEGER NULL, FK → Locations, ON DELETE RESTRICT). Indexes: `IX_Inventories_SupplierId`, `IX_Inventories_LocationId`.
+- **InventoryAssignments:** `ReturnedQuantity` (INTEGER NOT NULL, default 0), `RenewalCount` (INTEGER NOT NULL, default 0), `ReturnCondition` (INTEGER NULL).
+
+### New tables
+
+**StockMovements** (append-only ledger)
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| Id | INTEGER | PK, identity |
+| InventoryId | INTEGER | NOT NULL, FK → Inventories (RESTRICT) |
+| MovementType | INTEGER | Received/Assigned/Returned/Adjusted/Transferred/Disposed |
+| QuantityChange | INTEGER | signed delta |
+| BalanceAfter | INTEGER | available-qty snapshot after the movement |
+| Reason / Notes | TEXT | ≤500 / ≤1000 |
+| UnitCost | decimal(18,2) | NULL |
+| PerformedByUserId | INTEGER | NULL, FK → Users (SET NULL) |
+| AssignmentId | INTEGER | NULL, FK → InventoryAssignments (SET NULL) |
+| FromLocationId / ToLocationId | INTEGER | NULL, FK → Locations (SET NULL) |
+| SupplierId | INTEGER | NULL, FK → Suppliers (SET NULL) |
+| + BaseEntity audit/soft-delete/ConcurrencyToken columns | | |
+
+Indexes: `IX_StockMovements_InventoryId`, `_CreatedAt`, `_MovementType`, `_PerformedByUserId`, `_AssignmentId`, `_FromLocationId`, `_ToLocationId`, `_SupplierId`.
+
+**Suppliers** — `Name` (unique filtered index `IX_Suppliers_Name` where `IsDeleted = 0`), `ContactName`, `Email`, `Phone`, `Address`, `Website`, `LeadTimeDays` (NULL), `IsActive`, `Notes` + BaseEntity columns. Index: `IX_Suppliers_IsActive`.
+
+**Locations** — `Name`, `Code` (unique filtered index where `Code IS NOT NULL AND IsDeleted = 0`), `Description`, `ParentLocationId` (self-FK, RESTRICT), `IsActive` + BaseEntity columns. Indexes: `IX_Locations_Code`, `_ParentLocationId`, `_IsActive`.
+
+**MaintenanceSchedules** — `InventoryId` (FK → Inventories RESTRICT), `MaintenanceType`, `Title`, `Description`, `IntervalDays` (NULL), `LastPerformedAt` (NULL), `NextDueAt`, `Status`, `PerformedByUserId` (FK → Users SET NULL), `Notes` + BaseEntity columns. Indexes: `IX_MaintenanceSchedules_InventoryId`, `_NextDueAt`, `_Status`.
+
+### Delete behavior rationale
+
+The required `Inventory` reference on movements/schedules uses **RESTRICT** so history is never orphaned; optional references (actor, assignment, from/to location, supplier) use **SET NULL** so a ledger row always survives. All new entities carry the soft-delete query filter to stay consistent with their filtered principals.

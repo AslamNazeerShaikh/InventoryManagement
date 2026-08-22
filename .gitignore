@@ -6,6 +6,11 @@
 # dotenv files
 .env
 
+# SQLite development database (generated at runtime from EF Core migrations)
+*.db
+*.db-shm
+*.db-wal
+
 # User-specific files
 *.rsuser
 *.suo
@@ -88,6 +93,8 @@ StyleCopReport.xml
 *.pgc
 *.pgd
 *.rsp
+# but not Directory.Build.rsp, as it configures directory-level build defaults
+!Directory.Build.rsp
 *.sbr
 *.tlb
 *.tli
@@ -421,10 +428,6 @@ autom4te.cache/
 *.tar.gz
 tarballs/
 test-results/
-
-# Mac bundle stuff
-*.dmg
-*.app
 
 # content below from: https://github.com/github/gitignore/blob/main/Global/macOS.gitignore
 # General
