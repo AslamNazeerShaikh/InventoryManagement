@@ -59,23 +59,14 @@ public class UserRepository : GenericRepository<User>, IUserRepository
             .ConfigureAwait(false);
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<User>> GetNursePractitionersAsync(
-        CancellationToken cancellationToken = default
-    ) =>
-        await EntitySet
-            .AsNoTracking()
-            .Where(x => x.Role == Domain.Enums.UserRole.NursePractitioner && x.IsActive)
-            .OrderBy(x => x.Name)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-    /// <inheritdoc />
     public async Task<IReadOnlyList<User>> GetActiveUsersAsync(
         CancellationToken cancellationToken = default
     ) =>
         await EntitySet
             .AsNoTracking()
             .Where(x => x.IsActive)
+            .Include(x => x.UserRoles)
+            .ThenInclude(ur => ur.Role)
             .OrderBy(x => x.Name)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);

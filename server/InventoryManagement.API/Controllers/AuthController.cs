@@ -49,7 +49,7 @@ public class AuthController : ApiControllerBase
     /// <summary>Revokes the current user's refresh token.</summary>
     /// <param name="cancellationToken">Cancellation token.</param>
     [HttpPost("logout")]
-    [Authorize(Policy = AuthConstants.Policies.AllRoles)]
+    [Authorize]
     public async Task<ActionResult<ApiResponse<bool>>> Logout(CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -64,7 +64,7 @@ public class AuthController : ApiControllerBase
     /// <param name="changePasswordDto">Current and new password.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     [HttpPost("change-password")]
-    [Authorize(Policy = AuthConstants.Policies.AllRoles)]
+    [Authorize]
     public async Task<ActionResult<ApiResponse<bool>>> ChangePassword(
         [FromBody] ChangePasswordDto changePasswordDto,
         CancellationToken cancellationToken
@@ -80,9 +80,9 @@ public class AuthController : ApiControllerBase
         );
     }
 
-    /// <summary>Returns the identity claims of the authenticated caller.</summary>
+    /// <summary>Returns the identity, roles and permissions of the authenticated caller.</summary>
     [HttpGet("me")]
-    [Authorize(Policy = AuthConstants.Policies.AllRoles)]
+    [Authorize]
     public ActionResult<ApiResponse<object>> GetCurrentUser()
     {
         var claims = new
@@ -90,9 +90,13 @@ public class AuthController : ApiControllerBase
             UserId = User.FindFirst(AuthConstants.Claims.UserId)?.Value,
             Email = User.FindFirst(AuthConstants.Claims.Email)?.Value,
             Name = User.FindFirst(AuthConstants.Claims.Name)?.Value,
-            Role = User.FindFirst(AuthConstants.Claims.Role)?.Value,
-            IsAdmin = User.FindFirst(AuthConstants.Claims.IsAdmin)?.Value,
-            IsProvider = User.FindFirst(AuthConstants.Claims.IsProvider)?.Value,
+            Tenant = User.FindFirst(AuthConstants.Claims.Tenant)?.Value,
+            Roles = User.FindAll(System.Security.Claims.ClaimTypes.Role)
+                .Select(c => c.Value)
+                .ToArray(),
+            Permissions = User.FindAll(AuthConstants.Claims.Permission)
+                .Select(c => c.Value)
+                .ToArray(),
         };
 
         return Ok(ApiResponse<object>.Success(claims, "Current user information retrieved"));

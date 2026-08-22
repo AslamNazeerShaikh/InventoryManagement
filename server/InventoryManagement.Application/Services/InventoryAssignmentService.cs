@@ -538,7 +538,7 @@ public sealed class InventoryAssignmentService : IInventoryAssignmentService
         var historyDto = new AssignmentHistoryDto
         {
             InventoryId = inventoryId,
-            EquipmentName = inventory.EquipmentName,
+            ItemName = inventory.Name,
             Assignments = assignments.ToDto().ToList(),
         };
 

@@ -2,8 +2,10 @@ using InventoryManagement.Application.Mapping;
 using InventoryManagement.Domain.Common;
 using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.DTOs;
+using InventoryManagement.Domain.Entities;
 using InventoryManagement.Domain.Interfaces;
 using InventoryManagement.Domain.Security;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace InventoryManagement.Application.Services;
@@ -35,6 +37,7 @@ public sealed class UserService : IUserService
     {
         var users = await _unitOfWork
             .Users.ListAsync(
+                include: q => q.Include(u => u.UserRoles).ThenInclude(ur => ur.Role),
                 orderBy: q => q.OrderBy(u => u.Name),
                 cancellationToken: cancellationToken
             )
@@ -48,9 +51,7 @@ public sealed class UserService : IUserService
         CancellationToken cancellationToken = default
     )
     {
-        var user = await _unitOfWork
-            .Users.GetByIdAsync(id, cancellationToken)
-            .ConfigureAwait(false);
+        var user = await LoadUserWithRolesAsync(id, cancellationToken).ConfigureAwait(false);
         return user is null
             ? Result<UserDto>.NotFound("User not found")
             : Result<UserDto>.Success(user.ToDto());
@@ -91,14 +92,18 @@ public sealed class UserService : IUserService
         await _unitOfWork.Users.AddAsync(user, cancellationToken).ConfigureAwait(false);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+        await AssignRolesAsync(user.Id, createUserDto.RoleIds, cancellationToken).ConfigureAwait(false);
+
         _logger.LogInformation("Created user {UserId} ({Email}).", user.Id, user.Email);
-        return Result<UserDto>.Success(user.ToDto(), "User created successfully");
+        var created = await LoadUserWithRolesAsync(user.Id, cancellationToken).ConfigureAwait(false);
+        return Result<UserDto>.Success(created!.ToDto(), "User created successfully");
     }
 
     /// <inheritdoc />
     public async Task<Result<UserDto>> UpdateUserAsync(
         int id,
         UpdateUserDto updateUserDto,
+        bool allowPrivilegedFields,
         CancellationToken cancellationToken = default
     )
     {
@@ -120,11 +125,23 @@ public sealed class UserService : IUserService
             return Result<UserDto>.Conflict("Email already exists");
         }
 
-        updateUserDto.UpdateEntity(user);
+        user.Name = updateUserDto.Name;
+        user.Email = updateUserDto.Email;
+        if (allowPrivilegedFields)
+        {
+            user.IsActive = updateUserDto.IsActive;
+        }
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+        // Role membership is a privileged change; a null role set (or a self-service edit) leaves it untouched.
+        if (allowPrivilegedFields && updateUserDto.RoleIds is not null)
+        {
+            await AssignRolesAsync(id, updateUserDto.RoleIds, cancellationToken).ConfigureAwait(false);
+        }
+
         _logger.LogInformation("Updated user {UserId}.", id);
-        return Result<UserDto>.Success(user.ToDto(), "User updated successfully");
+        var updated = await LoadUserWithRolesAsync(id, cancellationToken).ConfigureAwait(false);
+        return Result<UserDto>.Success(updated!.ToDto(), "User updated successfully");
     }
 
     /// <inheritdoc />
@@ -147,17 +164,6 @@ public sealed class UserService : IUserService
 
         _logger.LogInformation("Soft-deleted user {UserId}.", id);
         return Result<bool>.Success(true, "User deleted successfully");
-    }
-
-    /// <inheritdoc />
-    public async Task<Result<IEnumerable<UserDto>>> GetNursePractitionersAsync(
-        CancellationToken cancellationToken = default
-    )
-    {
-        var nurses = await _unitOfWork
-            .Users.GetNursePractitionersAsync(cancellationToken)
-            .ConfigureAwait(false);
-        return Result<IEnumerable<UserDto>>.Success(nurses.ToDto());
     }
 
     /// <inheritdoc />
@@ -185,6 +191,7 @@ public sealed class UserService : IUserService
                 pageNumber,
                 pageSize,
                 orderBy: q => q.OrderByDescending(u => u.CreatedAt),
+                include: q => q.Include(u => u.UserRoles).ThenInclude(ur => ur.Role),
                 cancellationToken: cancellationToken
             )
             .ConfigureAwait(false);
@@ -198,5 +205,53 @@ public sealed class UserService : IUserService
         };
 
         return Result<PagedResult<UserDto>>.Success(result);
+    }
+
+    /// <summary>Loads a user (tracking-free) with their role memberships for projection.</summary>
+    private Task<User?> LoadUserWithRolesAsync(int id, CancellationToken cancellationToken) =>
+        _unitOfWork.Users.FirstOrDefaultAsync(
+            u => u.Id == id,
+            include: q => q.Include(u => u.UserRoles).ThenInclude(ur => ur.Role),
+            cancellationToken: cancellationToken
+        );
+
+    /// <summary>Reconciles a user's role memberships to exactly the supplied (existing) role ids.</summary>
+    private async Task AssignRolesAsync(
+        int userId,
+        IReadOnlyCollection<int> roleIds,
+        CancellationToken cancellationToken
+    )
+    {
+        // Keep only ids that resolve to a role in the current tenant.
+        var validRoleIds = new HashSet<int>();
+        foreach (var roleId in roleIds.Distinct())
+        {
+            if (
+                await _unitOfWork.Roles.GetByIdAsync(roleId, cancellationToken).ConfigureAwait(false)
+                is not null
+            )
+            {
+                validRoleIds.Add(roleId);
+            }
+        }
+
+        var existing = await _unitOfWork
+            .UserRoles.GetForUserAsync(userId, cancellationToken)
+            .ConfigureAwait(false);
+        var existingRoleIds = existing.Select(ur => ur.RoleId).ToHashSet();
+
+        foreach (var membership in existing.Where(ur => !validRoleIds.Contains(ur.RoleId)))
+        {
+            _unitOfWork.UserRoles.Remove(membership);
+        }
+
+        foreach (var roleId in validRoleIds.Where(rid => !existingRoleIds.Contains(rid)))
+        {
+            await _unitOfWork
+                .UserRoles.AddAsync(new UserRole { UserId = userId, RoleId = roleId }, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 }

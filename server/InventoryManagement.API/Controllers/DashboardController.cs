@@ -1,8 +1,8 @@
 using InventoryManagement.API.Infrastructure;
-using InventoryManagement.Domain.Constants;
+using InventoryManagement.API.Infrastructure.Authorization;
+using InventoryManagement.Domain.Authorization;
 using InventoryManagement.Domain.DTOs;
 using InventoryManagement.Domain.Interfaces;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace InventoryManagement.API.Controllers;
@@ -15,7 +15,7 @@ namespace InventoryManagement.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
-[Authorize(Policy = AuthConstants.Policies.AllRoles)]
+[HasPermission(Permissions.Dashboard.Read)]
 public class DashboardController : ApiControllerBase
 {
     private readonly IDashboardService _dashboardService;
@@ -46,7 +46,7 @@ public class DashboardController : ApiControllerBase
 
     /// <summary>Gets the most recent assignments (Admin or Provider; count clamped 1–50).</summary>
     [HttpGet("recent-assignments")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Assignments.Read)]
     public async Task<
         ActionResult<ApiResponse<IEnumerable<InventoryAssignmentDto>>>
     > GetRecentAssignments(
@@ -68,7 +68,7 @@ public class DashboardController : ApiControllerBase
 
     /// <summary>Gets overdue assignments (Admin or Provider).</summary>
     [HttpGet("alerts/overdue")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Assignments.Read)]
     public async Task<
         ActionResult<ApiResponse<IEnumerable<InventoryAssignmentDto>>>
     > GetOverdueAlerts(CancellationToken cancellationToken) =>
@@ -83,9 +83,9 @@ public class DashboardController : ApiControllerBase
         var expiry = await _dashboardService.GetExpiryAlertsAsync(cancellationToken);
         var lowStock = await _dashboardService.GetLowStockAlertsAsync(cancellationToken);
 
-        var isAdminOrProvider = IsAdminOrProvider();
+        var canViewAssignments = HasPermission(Permissions.Assignments.Read);
         IEnumerable<InventoryAssignmentDto> overdue = new List<InventoryAssignmentDto>();
-        if (isAdminOrProvider)
+        if (canViewAssignments)
         {
             var overdueResult = await _dashboardService.GetOverdueAlertsAsync(cancellationToken);
             overdue = overdueResult.Value ?? Enumerable.Empty<InventoryAssignmentDto>();
@@ -99,7 +99,7 @@ public class DashboardController : ApiControllerBase
             LowStockCount = lowStock.Value?.Count() ?? 0,
             OverdueAlerts = overdue,
             OverdueCount = overdue.Count(),
-            HasPermissionForOverdue = isAdminOrProvider,
+            HasPermissionForOverdue = canViewAssignments,
         };
 
         return Ok(ApiResponse<object>.Success(summary, "Alerts summary retrieved successfully"));
@@ -119,10 +119,10 @@ public class DashboardController : ApiControllerBase
         var expiry = await _dashboardService.GetExpiryAlertsAsync(cancellationToken);
         var lowStock = await _dashboardService.GetLowStockAlertsAsync(cancellationToken);
 
-        var isAdminOrProvider = IsAdminOrProvider();
+        var canViewAssignments = HasPermission(Permissions.Assignments.Read);
         IEnumerable<InventoryAssignmentDto> recentAssignments = new List<InventoryAssignmentDto>();
         IEnumerable<InventoryAssignmentDto> overdue = new List<InventoryAssignmentDto>();
-        if (isAdminOrProvider)
+        if (canViewAssignments)
         {
             var recentAssignmentsResult = await _dashboardService.GetRecentAssignmentsAsync(
                 5,
@@ -154,10 +154,9 @@ public class DashboardController : ApiControllerBase
             },
             UserPermissions = new
             {
-                CanViewAssignments = isAdminOrProvider,
-                CanManageUsers = IsAdmin(),
-                IsAdmin = IsAdmin(),
-                IsProvider = User.FindFirst(AuthConstants.Claims.IsProvider)?.Value == "True",
+                CanViewAssignments = canViewAssignments,
+                CanManageUsers = HasPermission(Permissions.Users.Manage),
+                CanManageInventory = HasPermission(Permissions.Inventory.Manage),
             },
         };
 
@@ -165,9 +164,4 @@ public class DashboardController : ApiControllerBase
             ApiResponse<object>.Success(overview, "Dashboard overview retrieved successfully")
         );
     }
-
-    private bool IsAdmin() => User.FindFirst(AuthConstants.Claims.IsAdmin)?.Value == "True";
-
-    private bool IsAdminOrProvider() =>
-        IsAdmin() || User.FindFirst(AuthConstants.Claims.IsProvider)?.Value == "True";
 }

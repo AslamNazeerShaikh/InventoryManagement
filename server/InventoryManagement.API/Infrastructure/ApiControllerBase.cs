@@ -1,5 +1,6 @@
 using System.Linq;
 using InventoryManagement.Domain.Common;
+using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.DTOs;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -13,6 +14,10 @@ namespace InventoryManagement.API.Infrastructure;
 /// </summary>
 public abstract class ApiControllerBase : ControllerBase
 {
+    /// <summary>Whether the authenticated caller holds the given permission (from their permission claims).</summary>
+    protected bool HasPermission(string permission) =>
+        User.HasClaim(AuthConstants.Claims.Permission, permission);
+
     /// <summary>Maps a successful result to <c>200 OK</c> and a failure to its mapped status code.</summary>
     /// <typeparam name="T">Payload type.</typeparam>
     /// <param name="result">The service result.</param>

@@ -153,7 +153,7 @@ export default function InventoryDetailPage() {
         <FadeIn className="space-y-6">
           <PageHeader
             icon={Boxes}
-            title={item.equipmentName}
+            title={item.name}
             description={
               [item.category, item.brand].filter(Boolean).join(" · ") ||
               "Inventory item"
@@ -474,7 +474,7 @@ export default function InventoryDetailPage() {
         onConfirm={handleDelete}
         loading={deleting}
         title="Delete inventory item"
-        description={`This will permanently remove "${item?.equipmentName}". This action cannot be undone.`}
+        description={`This will permanently remove "${item?.name}". This action cannot be undone.`}
         confirmText="Delete"
       />
     </div>

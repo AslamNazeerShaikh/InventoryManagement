@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
+using InventoryManagement.Domain.Authorization;
 using InventoryManagement.Domain.Common;
 using InventoryManagement.Domain.Entities;
-using InventoryManagement.Domain.Enums;
 using InventoryManagement.Domain.Interfaces;
 using InventoryManagement.Domain.Security;
 using InventoryManagement.Infrastructure.Data;
@@ -60,6 +60,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISupplierRepository, SupplierRepository>();
         services.AddScoped<ILocationRepository, LocationRepository>();
         services.AddScoped<IMaintenanceScheduleRepository, MaintenanceScheduleRepository>();
+        services.AddScoped<IRoleRepository, RoleRepository>();
+        services.AddScoped<IPermissionRepository, PermissionRepository>();
+        services.AddScoped<IUserRoleRepository, UserRoleRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         // Idempotency store and background purge.
@@ -91,53 +94,167 @@ public static class ServiceCollectionExtensions
 
         await context.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
 
+        // Seed the tenant's permission catalog and system roles (idempotent).
+        await SeedTenantRbacAsync(context, cancellationToken).ConfigureAwait(false);
+
         var adminEmail = configuration["SeedData:AdminEmail"] ?? "admin@inventorymanagement.com";
 
-        if (
-            await context
-                .Users.IgnoreQueryFilters()
-                .AnyAsync(u => u.Email == adminEmail && !u.IsDeleted, cancellationToken)
-                .ConfigureAwait(false)
-        )
+        var adminUser = await context
+            .Users.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u => u.Email == adminEmail && !u.IsDeleted, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (adminUser is null)
         {
-            return serviceProvider;
+            var configuredPassword = configuration["SeedData:AdminPassword"];
+            var adminPassword = string.IsNullOrWhiteSpace(configuredPassword)
+                ? GenerateStrongPassword()
+                : configuredPassword;
+
+            adminUser = new User
+            {
+                Name = "System Administrator",
+                Email = adminEmail,
+                PasswordHash = hasher.Hash(adminPassword),
+                IsActive = true,
+                CreatedBy = "System",
+            };
+
+            await context.Users.AddAsync(adminUser, cancellationToken).ConfigureAwait(false);
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+            if (string.IsNullOrWhiteSpace(configuredPassword))
+            {
+                logger.LogWarning(
+                    "Seeded administrator {Email} with a generated password: {Password}. "
+                        + "Change it immediately and configure SeedData:AdminPassword for reproducible setups.",
+                    adminEmail,
+                    adminPassword
+                );
+            }
+            else
+            {
+                logger.LogInformation("Seeded administrator {Email} from configuration.", adminEmail);
+            }
         }
 
-        var configuredPassword = configuration["SeedData:AdminPassword"];
-        var adminPassword = string.IsNullOrWhiteSpace(configuredPassword)
-            ? GenerateStrongPassword()
-            : configuredPassword;
-
-        var adminUser = new User
-        {
-            Name = "System Administrator",
-            Email = adminEmail,
-            PasswordHash = hasher.Hash(adminPassword),
-            IsAdmin = true,
-            IsProvider = false,
-            Role = UserRole.Admin,
-            IsActive = true,
-            CreatedBy = "System",
-        };
-
-        await context.Users.AddAsync(adminUser, cancellationToken).ConfigureAwait(false);
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-
-        if (string.IsNullOrWhiteSpace(configuredPassword))
-        {
-            logger.LogWarning(
-                "Seeded administrator {Email} with a generated password: {Password}. "
-                    + "Change it immediately and configure SeedData:AdminPassword for reproducible setups.",
-                adminEmail,
-                adminPassword
-            );
-        }
-        else
-        {
-            logger.LogInformation("Seeded administrator {Email} from configuration.", adminEmail);
-        }
+        // Ensure the seeded administrator holds the Administrator role.
+        await EnsureAdminRoleAsync(context, adminUser.Id, cancellationToken).ConfigureAwait(false);
 
         return serviceProvider;
+    }
+
+    /// <summary>Seeds the permission catalog and system roles (with default grants) for the current tenant. Idempotent.</summary>
+    private static async Task SeedTenantRbacAsync(
+        AppDbContext context,
+        CancellationToken cancellationToken
+    )
+    {
+        // 1. Permission catalog: insert any codes missing for this tenant.
+        var existingCodes = await context
+            .Permissions.Select(p => p.Code)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var missing = Permissions.All.Where(def => !existingCodes.Contains(def.Code)).ToList();
+        foreach (var def in missing)
+        {
+            await context
+                .Permissions.AddAsync(
+                    new Permission
+                    {
+                        Code = def.Code,
+                        Description = def.Description,
+                        Category = def.Category,
+                    },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        }
+        if (missing.Count > 0)
+        {
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        var permissionIdByCode = await context
+            .Permissions.ToDictionaryAsync(p => p.Code, p => p.Id, cancellationToken)
+            .ConfigureAwait(false);
+
+        // 2. System roles and their default permission grants.
+        foreach (var roleName in SystemRoles.All)
+        {
+            var role = await context
+                .Roles.FirstOrDefaultAsync(r => r.Name == roleName, cancellationToken)
+                .ConfigureAwait(false);
+            if (role is null)
+            {
+                role = new Role
+                {
+                    Name = roleName,
+                    IsSystem = true,
+                    Description = $"Built-in {roleName} role.",
+                };
+                await context.Roles.AddAsync(role, cancellationToken).ConfigureAwait(false);
+                await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            var grantedPermissionIds = await context
+                .RolePermissions.Where(rp => rp.RoleId == role.Id)
+                .Select(rp => rp.PermissionId)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            foreach (var code in SystemRoles.DefaultGrants[roleName])
+            {
+                if (
+                    permissionIdByCode.TryGetValue(code, out var permissionId)
+                    && !grantedPermissionIds.Contains(permissionId)
+                )
+                {
+                    await context
+                        .RolePermissions.AddAsync(
+                            new RolePermission { RoleId = role.Id, PermissionId = permissionId },
+                            cancellationToken
+                        )
+                        .ConfigureAwait(false);
+                }
+            }
+        }
+
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Ensures the administrator user is a member of the Administrator role. Idempotent.</summary>
+    private static async Task EnsureAdminRoleAsync(
+        AppDbContext context,
+        int adminUserId,
+        CancellationToken cancellationToken
+    )
+    {
+        var adminRole = await context
+            .Roles.FirstOrDefaultAsync(r => r.Name == SystemRoles.Administrator, cancellationToken)
+            .ConfigureAwait(false);
+        if (adminRole is null)
+        {
+            return;
+        }
+
+        var alreadyAssigned = await context
+            .UserRoles.AnyAsync(
+                ur => ur.UserId == adminUserId && ur.RoleId == adminRole.Id,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        if (!alreadyAssigned)
+        {
+            await context
+                .UserRoles.AddAsync(
+                    new UserRole { UserId = adminUserId, RoleId = adminRole.Id },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>Generates a cryptographically strong, URL-safe password.</summary>

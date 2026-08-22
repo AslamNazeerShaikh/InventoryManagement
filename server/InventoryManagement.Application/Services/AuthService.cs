@@ -19,6 +19,7 @@ public sealed class AuthService : IAuthService
     private readonly ITokenService _tokenService;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IDateTimeProvider _clock;
+    private readonly ITenantContext _tenantContext;
     private readonly ILogger<AuthService> _logger;
 
     /// <summary>Creates the authentication service.</summary>
@@ -27,6 +28,7 @@ public sealed class AuthService : IAuthService
         ITokenService tokenService,
         IPasswordHasher passwordHasher,
         IDateTimeProvider clock,
+        ITenantContext tenantContext,
         ILogger<AuthService> logger
     )
     {
@@ -34,6 +36,7 @@ public sealed class AuthService : IAuthService
         _tokenService = tokenService;
         _passwordHasher = passwordHasher;
         _clock = clock;
+        _tenantContext = tenantContext;
         _logger = logger;
     }
 
@@ -73,6 +76,9 @@ public sealed class AuthService : IAuthService
             user.PasswordHash = _passwordHasher.Hash(loginDto.Password);
         }
 
+        // Pin the tenant from the authenticated user so role/permission resolution is tenant-scoped.
+        _tenantContext.SetTenant(user.TenantId);
+
         var response = await IssueTokensAsync(user, cancellationToken).ConfigureAwait(false);
         user.LastLoginAt = _clock.UtcNow;
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -97,6 +103,9 @@ public sealed class AuthService : IAuthService
             _logger.LogWarning("Refresh token rejected: no matching active token.");
             return Result<AuthResponseDto>.Unauthorized("Invalid or expired refresh token");
         }
+
+        // Pin the tenant from the resolved user so role/permission resolution is tenant-scoped.
+        _tenantContext.SetTenant(user.TenantId);
 
         var response = await IssueTokensAsync(user, cancellationToken).ConfigureAwait(false);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -166,7 +175,19 @@ public sealed class AuthService : IAuthService
         CancellationToken cancellationToken
     )
     {
+        // Resolve the user's roles and their distinct permission codes (tenant-scoped) for the token.
+        var roles = await _unitOfWork
+            .UserRoles.GetRolesWithPermissionsForUserAsync(user.Id, cancellationToken)
+            .ConfigureAwait(false);
+
         var userDto = user.ToDto();
+        userDto.Roles = roles.Select(r => r.Name).OrderBy(name => name).ToList();
+        userDto.Permissions = roles
+            .SelectMany(r => r.RolePermissions.Select(rp => rp.Permission.Code))
+            .Distinct()
+            .OrderBy(code => code)
+            .ToList();
+
         var accessToken = await _tokenService
             .CreateAccessTokenAsync(userDto, cancellationToken)
             .ConfigureAwait(false);

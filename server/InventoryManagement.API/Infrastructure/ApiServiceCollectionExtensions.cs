@@ -1,11 +1,13 @@
 using System.Linq;
 using System.Threading.RateLimiting;
+using InventoryManagement.API.Infrastructure.Authorization;
 using InventoryManagement.API.Infrastructure.ErrorHandling;
 using InventoryManagement.Domain.Configuration;
 using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.DTOs;
 using InventoryManagement.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
@@ -75,7 +77,13 @@ public static class ApiServiceCollectionExtensions
 
         AddCors(services, configuration);
         AddJwtAuthentication(services, configuration, environment);
-        AddAuthorizationPolicies(services);
+
+        // Permission-based authorization: a dynamic policy provider materializes a policy per
+        // permission code on demand, and a handler grants it from the caller's permission claims.
+        services.AddAuthorization();
+        services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
+        services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
+
         AddRateLimiting(services, configuration);
 
         services.AddHealthChecks();
@@ -150,28 +158,6 @@ public static class ApiServiceCollectionExtensions
                         ClockSkew = TimeSpan.FromSeconds(jwt.ClockSkewSeconds),
                     };
                 }
-            );
-    }
-
-    private static void AddAuthorizationPolicies(IServiceCollection services)
-    {
-        services
-            .AddAuthorizationBuilder()
-            .AddPolicy(
-                AuthConstants.Policies.AdminOnly,
-                policy => policy.RequireClaim(AuthConstants.Claims.IsAdmin, "True")
-            )
-            .AddPolicy(
-                AuthConstants.Policies.AdminOrProvider,
-                policy =>
-                    policy.RequireAssertion(context =>
-                        context.User.HasClaim(AuthConstants.Claims.IsAdmin, "True")
-                        || context.User.HasClaim(AuthConstants.Claims.IsProvider, "True")
-                    )
-            )
-            .AddPolicy(
-                AuthConstants.Policies.AllRoles,
-                policy => policy.RequireAuthenticatedUser()
             );
     }
 

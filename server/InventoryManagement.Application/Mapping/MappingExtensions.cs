@@ -19,9 +19,11 @@ public static class MappingExtensions
             TenantId = user.TenantId,
             Name = user.Name,
             Email = user.Email,
-            IsAdmin = user.IsAdmin,
-            IsProvider = user.IsProvider,
-            Role = user.Role,
+            Roles = user
+                .UserRoles.Select(ur => ur.Role?.Name)
+                .Where(name => !string.IsNullOrEmpty(name))
+                .Select(name => name!)
+                .ToList(),
             IsActive = user.IsActive,
             LastLoginAt = user.LastLoginAt,
             CreatedAt = user.CreatedAt,
@@ -35,9 +37,6 @@ public static class MappingExtensions
         {
             Name = createUserDto.Name,
             Email = createUserDto.Email,
-            IsAdmin = createUserDto.IsAdmin,
-            IsProvider = createUserDto.IsProvider,
-            Role = createUserDto.Role,
             IsActive = true,
         };
     }
@@ -47,9 +46,6 @@ public static class MappingExtensions
     {
         user.Name = updateUserDto.Name;
         user.Email = updateUserDto.Email;
-        user.IsAdmin = updateUserDto.IsAdmin;
-        user.IsProvider = updateUserDto.IsProvider;
-        user.Role = updateUserDto.Role;
         user.IsActive = updateUserDto.IsActive;
     }
 
@@ -59,7 +55,7 @@ public static class MappingExtensions
         return new InventoryDto
         {
             Id = inventory.Id,
-            EquipmentName = inventory.EquipmentName,
+            Name = inventory.Name,
             Description = inventory.Description,
             Category = inventory.Category,
             Brand = inventory.Brand,
@@ -95,7 +91,7 @@ public static class MappingExtensions
     {
         return new Inventory
         {
-            EquipmentName = createInventoryDto.EquipmentName,
+            Name = createInventoryDto.Name,
             Description = createInventoryDto.Description,
             Category = createInventoryDto.Category,
             Brand = createInventoryDto.Brand,
@@ -120,7 +116,7 @@ public static class MappingExtensions
     /// <summary>Applies editable fields from an <see cref="UpdateInventoryDto"/> onto an existing item.</summary>
     public static void UpdateEntity(this UpdateInventoryDto updateInventoryDto, Inventory inventory)
     {
-        inventory.EquipmentName = updateInventoryDto.EquipmentName;
+        inventory.Name = updateInventoryDto.Name;
         inventory.Description = updateInventoryDto.Description;
         inventory.Category = updateInventoryDto.Category;
         inventory.Brand = updateInventoryDto.Brand;
@@ -148,7 +144,7 @@ public static class MappingExtensions
         {
             Id = assignment.Id,
             InventoryId = assignment.InventoryId,
-            EquipmentName = assignment.Inventory?.EquipmentName ?? string.Empty,
+            ItemName = assignment.Inventory?.Name ?? string.Empty,
             Category = assignment.Inventory?.Category,
             Barcode = assignment.Inventory?.Barcode,
             UserId = assignment.UserId,
@@ -201,6 +197,41 @@ public static class MappingExtensions
     /// <summary>Projects a sequence of users to DTOs.</summary>
     public static IEnumerable<UserDto> ToDto(this IEnumerable<User> users) => users.Select(ToDto);
 
+    /// <summary>Projects a <see cref="Role"/> (with permissions loaded) to a <see cref="RoleDto"/>.</summary>
+    public static RoleDto ToDto(this Role role)
+    {
+        return new RoleDto
+        {
+            Id = role.Id,
+            Name = role.Name,
+            Description = role.Description,
+            IsSystem = role.IsSystem,
+            Permissions = role
+                .RolePermissions.Select(rp => rp.Permission?.Code)
+                .Where(code => !string.IsNullOrEmpty(code))
+                .Select(code => code!)
+                .ToList(),
+        };
+    }
+
+    /// <summary>Projects a sequence of roles to DTOs.</summary>
+    public static IEnumerable<RoleDto> ToDto(this IEnumerable<Role> roles) => roles.Select(ToDto);
+
+    /// <summary>Projects a <see cref="Permission"/> to a <see cref="PermissionDto"/>.</summary>
+    public static PermissionDto ToDto(this Permission permission)
+    {
+        return new PermissionDto
+        {
+            Code = permission.Code,
+            Description = permission.Description,
+            Category = permission.Category,
+        };
+    }
+
+    /// <summary>Projects a sequence of permissions to DTOs.</summary>
+    public static IEnumerable<PermissionDto> ToDto(this IEnumerable<Permission> permissions) =>
+        permissions.Select(ToDto);
+
     /// <summary>Projects a sequence of inventory items to DTOs.</summary>
     public static IEnumerable<InventoryDto> ToDto(this IEnumerable<Inventory> inventories) =>
         inventories.Select(ToDto);
@@ -217,7 +248,7 @@ public static class MappingExtensions
         {
             Id = movement.Id,
             InventoryId = movement.InventoryId,
-            EquipmentName = movement.Inventory?.EquipmentName ?? string.Empty,
+            ItemName = movement.Inventory?.Name ?? string.Empty,
             MovementType = movement.MovementType,
             QuantityChange = movement.QuantityChange,
             BalanceAfter = movement.BalanceAfter,
@@ -339,7 +370,7 @@ public static class MappingExtensions
         {
             Id = schedule.Id,
             InventoryId = schedule.InventoryId,
-            EquipmentName = schedule.Inventory?.EquipmentName ?? string.Empty,
+            ItemName = schedule.Inventory?.Name ?? string.Empty,
             MaintenanceType = schedule.MaintenanceType,
             Title = schedule.Title,
             Description = schedule.Description,

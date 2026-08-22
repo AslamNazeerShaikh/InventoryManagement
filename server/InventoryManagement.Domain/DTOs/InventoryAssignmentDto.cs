@@ -12,8 +12,8 @@ public class InventoryAssignmentDto
     /// <summary>Assigned inventory identifier.</summary>
     public int InventoryId { get; set; }
 
-    /// <summary>Assigned equipment name.</summary>
-    public string EquipmentName { get; set; } = string.Empty;
+    /// <summary>Assigned item name.</summary>
+    public string ItemName { get; set; } = string.Empty;
 
     /// <summary>Assigned item category.</summary>
     public string? Category { get; set; }
@@ -160,8 +160,8 @@ public class AssignmentHistoryDto
     /// <summary>Inventory identifier.</summary>
     public int InventoryId { get; set; }
 
-    /// <summary>Equipment name.</summary>
-    public string EquipmentName { get; set; } = string.Empty;
+    /// <summary>Item name.</summary>
+    public string ItemName { get; set; } = string.Empty;
 
     /// <summary>Chronological assignment records.</summary>
     public List<InventoryAssignmentDto> Assignments { get; set; } = new();

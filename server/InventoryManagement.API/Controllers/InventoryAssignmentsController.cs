@@ -1,4 +1,6 @@
 using InventoryManagement.API.Infrastructure;
+using InventoryManagement.API.Infrastructure.Authorization;
+using InventoryManagement.Domain.Authorization;
 using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.DTOs;
 using InventoryManagement.Domain.Interfaces;
@@ -12,7 +14,7 @@ namespace InventoryManagement.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
-[Authorize(Policy = AuthConstants.Policies.AllRoles)]
+[Authorize]
 public class InventoryAssignmentsController : ApiControllerBase
 {
     private readonly IInventoryAssignmentService _assignmentService;
@@ -30,7 +32,7 @@ public class InventoryAssignmentsController : ApiControllerBase
 
     /// <summary>Lists all assignments (Admin or Provider).</summary>
     [HttpGet]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Assignments.Read)]
     public async Task<
         ActionResult<ApiResponse<IEnumerable<InventoryAssignmentDto>>>
     > GetAllAssignments(CancellationToken cancellationToken) =>
@@ -38,7 +40,7 @@ public class InventoryAssignmentsController : ApiControllerBase
 
     /// <summary>Lists assignments with pagination (Admin or Provider).</summary>
     [HttpGet("paged")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Assignments.Read)]
     public async Task<
         ActionResult<ApiResponse<PagedResult<InventoryAssignmentDto>>>
     > GetAssignmentsPaged(
@@ -121,7 +123,7 @@ public class InventoryAssignmentsController : ApiControllerBase
 
     /// <summary>Lists active assignments (Admin or Provider).</summary>
     [HttpGet("active")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Assignments.Read)]
     public async Task<
         ActionResult<ApiResponse<IEnumerable<InventoryAssignmentDto>>>
     > GetActiveAssignments(CancellationToken cancellationToken) =>
@@ -152,7 +154,7 @@ public class InventoryAssignmentsController : ApiControllerBase
 
     /// <summary>Lists overdue assignments (Admin or Provider).</summary>
     [HttpGet("overdue")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Assignments.Read)]
     public async Task<
         ActionResult<ApiResponse<IEnumerable<InventoryAssignmentDto>>>
     > GetOverdueAssignments(CancellationToken cancellationToken) =>
@@ -160,7 +162,7 @@ public class InventoryAssignmentsController : ApiControllerBase
 
     /// <summary>Gets the assignment history for an inventory item (Admin or Provider).</summary>
     [HttpGet("history/inventory/{inventoryId:int}")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Assignments.Read)]
     public async Task<ActionResult<ApiResponse<AssignmentHistoryDto>>> GetAssignmentHistory(
         int inventoryId,
         CancellationToken cancellationToken
@@ -168,7 +170,7 @@ public class InventoryAssignmentsController : ApiControllerBase
 
     /// <summary>Creates a new assignment (Admin or Provider).</summary>
     [HttpPost]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Assignments.Manage)]
     public async Task<ActionResult<ApiResponse<InventoryAssignmentDto>>> CreateAssignment(
         [FromBody] CreateInventoryAssignmentDto createAssignmentDto,
         CancellationToken cancellationToken
@@ -197,7 +199,7 @@ public class InventoryAssignmentsController : ApiControllerBase
 
     /// <summary>Updates an active assignment (Admin or Provider).</summary>
     [HttpPut("{id:int}")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Assignments.Manage)]
     public async Task<ActionResult<ApiResponse<InventoryAssignmentDto>>> UpdateAssignment(
         int id,
         [FromBody] UpdateInventoryAssignmentDto updateAssignmentDto,
@@ -213,7 +215,7 @@ public class InventoryAssignmentsController : ApiControllerBase
 
     /// <summary>Processes a return (Admin or Provider).</summary>
     [HttpPost("return")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Assignments.Manage)]
     public async Task<ActionResult<ApiResponse<bool>>> ReturnAssignment(
         [FromBody] ReturnInventoryAssignmentDto returnAssignmentDto,
         CancellationToken cancellationToken
@@ -235,7 +237,7 @@ public class InventoryAssignmentsController : ApiControllerBase
 
     /// <summary>Renews/extends an active assignment's expected return date (Admin or Provider).</summary>
     [HttpPost("renew")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Assignments.Manage)]
     public async Task<ActionResult<ApiResponse<InventoryAssignmentDto>>> RenewAssignment(
         [FromBody] RenewInventoryAssignmentDto renewAssignmentDto,
         CancellationToken cancellationToken
@@ -243,7 +245,7 @@ public class InventoryAssignmentsController : ApiControllerBase
 
     /// <summary>Lists active assignments due within the given number of days (Admin or Provider).</summary>
     [HttpGet("due-soon")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Assignments.Read)]
     public async Task<
         ActionResult<ApiResponse<IEnumerable<InventoryAssignmentDto>>>
     > GetDueSoonAssignments(
@@ -254,7 +256,6 @@ public class InventoryAssignmentsController : ApiControllerBase
     private bool TryGetCallerId(out int userId) =>
         int.TryParse(User.FindFirst(AuthConstants.Claims.UserId)?.Value, out userId);
 
-    private bool IsAdminOrProvider() =>
-        User.FindFirst(AuthConstants.Claims.IsAdmin)?.Value == "True"
-        || User.FindFirst(AuthConstants.Claims.IsProvider)?.Value == "True";
+    // Elevated visibility: callers who may read all users' assignments (not just their own).
+    private bool IsAdminOrProvider() => HasPermission(Permissions.Assignments.Read);
 }

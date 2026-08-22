@@ -12,8 +12,8 @@ public class StockMovementDto
     /// <summary>Affected inventory identifier.</summary>
     public int InventoryId { get; set; }
 
-    /// <summary>Affected equipment name.</summary>
-    public string EquipmentName { get; set; } = string.Empty;
+    /// <summary>Affected item name.</summary>
+    public string ItemName { get; set; } = string.Empty;
 
     /// <summary>Movement classification.</summary>
     public StockMovementType MovementType { get; set; }

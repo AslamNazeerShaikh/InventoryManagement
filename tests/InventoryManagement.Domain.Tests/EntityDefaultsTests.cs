@@ -10,11 +10,10 @@ public class EntityDefaultsTests
     {
         var user = new User();
 
-        Assert.Equal(UserRole.Staff, user.Role);
         Assert.True(user.IsActive);
-        Assert.False(user.IsAdmin);
-        Assert.False(user.IsProvider);
         Assert.False(user.IsDeleted);
+        Assert.NotNull(user.UserRoles);
+        Assert.Empty(user.UserRoles);
         Assert.NotNull(user.AssignedInventories);
         Assert.NotNull(user.CreatedInventories);
         Assert.Empty(user.AssignedInventories);

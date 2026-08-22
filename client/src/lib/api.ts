@@ -11,6 +11,7 @@ import type {
   CreateInventoryDto,
   CreateLocationDto,
   CreateMaintenanceScheduleDto,
+  CreateRoleDto,
   CreateSupplierDto,
   CreateUserDto,
   DashboardStatsDto,
@@ -22,9 +23,11 @@ import type {
   LoginDto,
   MaintenanceScheduleDto,
   PagedResult,
+  PermissionDto,
   ReceiveStockDto,
   RenewInventoryAssignmentDto,
   ReturnInventoryAssignmentDto,
+  RoleDto,
   StockMovementDto,
   SupplierDto,
   TransferStockDto,
@@ -32,6 +35,7 @@ import type {
   UpdateInventoryDto,
   UpdateLocationDto,
   UpdateMaintenanceScheduleDto,
+  UpdateRoleDto,
   UpdateSupplierDto,
   UpdateUserDto,
   UserDto,
@@ -258,8 +262,17 @@ export const api = {
     update: (id: number, dto: UpdateUserDto) =>
       put<UserDto>(`/api/users/${id}`, dto),
     remove: (id: number) => del<boolean>(`/api/users/${id}`),
-    nursePractitioners: () => get<UserDto[]>("/api/users/nurse-practitioners"),
     active: () => get<UserDto[]>("/api/users/active"),
+  },
+
+  roles: {
+    list: () => get<RoleDto[]>("/api/roles"),
+    permissions: () => get<PermissionDto[]>("/api/roles/permissions"),
+    byId: (id: number) => get<RoleDto>(`/api/roles/${id}`),
+    create: (dto: CreateRoleDto) => post<RoleDto>("/api/roles", dto),
+    update: (id: number, dto: UpdateRoleDto) =>
+      put<RoleDto>(`/api/roles/${id}`, dto),
+    remove: (id: number) => del<boolean>(`/api/roles/${id}`),
   },
 
   inventory: {

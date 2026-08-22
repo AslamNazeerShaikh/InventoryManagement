@@ -4,12 +4,6 @@
  */
 
 /* ----------------------------- Enums ------------------------------ */
-export enum UserRole {
-  Admin = 1,
-  NursePractitioner = 2,
-  Staff = 3,
-}
-
 export enum InventoryStatus {
   Available = 1,
   Assigned = 2,
@@ -82,9 +76,8 @@ export interface UserDto {
   id: number;
   name: string;
   email: string;
-  isAdmin: boolean;
-  isProvider: boolean;
-  role: UserRole;
+  roles: string[];
+  permissions: string[];
   isActive: boolean;
   lastLoginAt: string | null;
   createdAt: string;
@@ -94,18 +87,42 @@ export interface CreateUserDto {
   name: string;
   email: string;
   password: string;
-  isAdmin: boolean;
-  isProvider: boolean;
-  role: UserRole;
+  roleIds: number[];
 }
 
 export interface UpdateUserDto {
   name: string;
   email: string;
-  isAdmin: boolean;
-  isProvider: boolean;
-  role: UserRole;
+  /** null leaves role membership unchanged (self-service profile edit). */
+  roleIds: number[] | null;
   isActive: boolean;
+}
+
+/* ------------------------ Roles & permissions --------------------- */
+export interface PermissionDto {
+  code: string;
+  description: string | null;
+  category: string | null;
+}
+
+export interface RoleDto {
+  id: number;
+  name: string;
+  description: string | null;
+  isSystem: boolean;
+  permissions: string[];
+}
+
+export interface CreateRoleDto {
+  name: string;
+  description?: string | null;
+  permissions: string[];
+}
+
+export interface UpdateRoleDto {
+  name: string;
+  description?: string | null;
+  permissions: string[];
 }
 
 /* -------------------------- Authentication ------------------------ */
@@ -134,7 +151,7 @@ export interface ChangePasswordDto {
 /* ---------------------------- Inventory --------------------------- */
 export interface InventoryDto {
   id: number;
-  equipmentName: string;
+  name: string;
   description: string | null;
   category: string | null;
   brand: string | null;
@@ -163,7 +180,7 @@ export interface InventoryDto {
 }
 
 export interface CreateInventoryDto {
-  equipmentName: string;
+  name: string;
   description?: string | null;
   category?: string | null;
   brand?: string | null;
@@ -201,7 +218,7 @@ export interface InventorySearchDto {
 export interface InventoryAssignmentDto {
   id: number;
   inventoryId: number;
-  equipmentName: string;
+  itemName: string;
   category: string | null;
   barcode: string | null;
   userId: number;
@@ -253,7 +270,7 @@ export interface RenewInventoryAssignmentDto {
 
 export interface AssignmentHistoryDto {
   inventoryId: number;
-  equipmentName: string;
+  itemName: string;
   assignments: InventoryAssignmentDto[];
 }
 
@@ -283,7 +300,7 @@ export interface AlertsSummaryDto {
 export interface StockMovementDto {
   id: number;
   inventoryId: number;
-  equipmentName: string;
+  itemName: string;
   movementType: StockMovementType;
   quantityChange: number;
   balanceAfter: number;
@@ -383,7 +400,7 @@ export interface UpdateLocationDto extends CreateLocationDto {
 export interface MaintenanceScheduleDto {
   id: number;
   inventoryId: number;
-  equipmentName: string;
+  itemName: string;
   maintenanceType: MaintenanceType;
   title: string;
   description: string | null;

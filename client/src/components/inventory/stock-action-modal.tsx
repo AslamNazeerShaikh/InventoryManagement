@@ -140,7 +140,7 @@ export function StockActionModal({
         };
         await api.inventory.transfer(item.id, dto, key);
       }
-      toast.success(`${meta.cta} complete`, { description: item.equipmentName });
+      toast.success(`${meta.cta} complete`, { description: item.name });
       onSaved();
       onClose();
     } catch (err) {

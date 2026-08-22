@@ -7,7 +7,7 @@ import { ChevronDown, LogOut, Palette, UserCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { roleLabels, roleTones } from "@/lib/utils";
+import { roleTone } from "@/lib/utils";
 
 export function UserMenu() {
   const { user, logout } = useAuth();
@@ -58,7 +58,7 @@ export function UserMenu() {
               </div>
             </div>
             <div className="px-3 pb-2">
-              <Badge tone={roleTones[user.role]}>{roleLabels[user.role]}</Badge>
+              <Badge tone={roleTone(user.roles[0] ?? "")}>{user.roles[0] ?? "Member"}</Badge>
             </div>
             <div className="my-1 h-px bg-white/[0.06]" />
             <Link

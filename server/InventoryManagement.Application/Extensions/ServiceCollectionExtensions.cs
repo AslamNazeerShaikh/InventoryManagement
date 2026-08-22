@@ -11,6 +11,7 @@ public static class ServiceCollectionExtensions
         // Register all application services
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IUserService, UserService>();
+        services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<IInventoryService, InventoryService>();
         services.AddScoped<IInventoryAssignmentService, InventoryAssignmentService>();
         services.AddScoped<IDashboardService, DashboardService>();

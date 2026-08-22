@@ -60,7 +60,7 @@ export default function AssignmentsPage() {
     const term = search.trim().toLowerCase();
     if (term) {
       list = list.filter((a) =>
-        [a.equipmentName, a.userName, a.userEmail, a.barcode]
+        [a.itemName, a.userName, a.userEmail, a.barcode]
           .filter(Boolean)
           .some((f) => f!.toLowerCase().includes(term)),
       );
@@ -194,7 +194,7 @@ export default function AssignmentsPage() {
                       <TD>
                         <div className="min-w-0">
                           <p className="truncate font-medium text-white">
-                            {a.equipmentName}
+                            {a.itemName}
                           </p>
                           <p className="truncate text-xs text-slate-500">
                             {a.category ?? a.barcode ?? "—"}

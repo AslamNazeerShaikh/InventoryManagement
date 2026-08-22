@@ -13,7 +13,7 @@ public class MaintenanceScheduleDto
     public int InventoryId { get; set; }
 
     /// <summary>Maintained asset name.</summary>
-    public string EquipmentName { get; set; } = string.Empty;
+    public string ItemName { get; set; } = string.Empty;
 
     /// <summary>Kind of service.</summary>
     public MaintenanceType MaintenanceType { get; set; }

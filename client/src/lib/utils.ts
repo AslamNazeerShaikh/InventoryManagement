@@ -7,7 +7,6 @@ import {
   MaintenanceType,
   ReturnCondition,
   StockMovementType,
-  UserRole,
 } from "@/lib/types";
 
 /** Merge Tailwind classes with conflict resolution. */
@@ -130,17 +129,19 @@ export function getInitials(name: string | null | undefined): string {
 }
 
 /* -------------------------- Enum display -------------------------- */
-export const roleLabels: Record<UserRole, string> = {
-  [UserRole.Admin]: "Administrator",
-  [UserRole.NursePractitioner]: "Nurse Practitioner",
-  [UserRole.Staff]: "Staff",
-};
-
-export const roleTones: Record<UserRole, Tone> = {
-  [UserRole.Admin]: "violet",
-  [UserRole.NursePractitioner]: "brand",
-  [UserRole.Staff]: "neutral",
-};
+/** Badge tone for a role name (well-known system roles get distinct tones; others fall back). */
+export function roleTone(roleName: string): Tone {
+  switch (roleName) {
+    case "Administrator":
+      return "violet";
+    case "Provider":
+      return "brand";
+    case "Staff":
+      return "neutral";
+    default:
+      return "info";
+  }
+}
 
 export const inventoryStatusLabels: Record<InventoryStatus, string> = {
   [InventoryStatus.Available]: "Available",

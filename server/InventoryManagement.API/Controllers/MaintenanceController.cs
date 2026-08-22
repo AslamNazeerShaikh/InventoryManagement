@@ -1,4 +1,6 @@
 using InventoryManagement.API.Infrastructure;
+using InventoryManagement.API.Infrastructure.Authorization;
+using InventoryManagement.Domain.Authorization;
 using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.DTOs;
 using InventoryManagement.Domain.Interfaces;
@@ -12,7 +14,7 @@ namespace InventoryManagement.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
-[Authorize(Policy = AuthConstants.Policies.AllRoles)]
+[HasPermission(Permissions.Maintenance.Read)]
 public class MaintenanceController : ApiControllerBase
 {
     private readonly IMaintenanceService _maintenanceService;
@@ -60,7 +62,7 @@ public class MaintenanceController : ApiControllerBase
 
     /// <summary>Creates a maintenance schedule (Admin or Provider).</summary>
     [HttpPost]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Maintenance.Manage)]
     public async Task<ActionResult<ApiResponse<MaintenanceScheduleDto>>> CreateSchedule(
         [FromBody] CreateMaintenanceScheduleDto createDto,
         CancellationToken cancellationToken
@@ -80,7 +82,7 @@ public class MaintenanceController : ApiControllerBase
 
     /// <summary>Updates a maintenance schedule (Admin or Provider).</summary>
     [HttpPut("{id:int}")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Maintenance.Manage)]
     public async Task<ActionResult<ApiResponse<MaintenanceScheduleDto>>> UpdateSchedule(
         int id,
         [FromBody] UpdateMaintenanceScheduleDto updateDto,
@@ -89,7 +91,7 @@ public class MaintenanceController : ApiControllerBase
 
     /// <summary>Records completion of a schedule, rolling recurring schedules forward (Admin or Provider).</summary>
     [HttpPost("{id:int}/complete")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOrProvider)]
+    [HasPermission(Permissions.Maintenance.Manage)]
     public async Task<ActionResult<ApiResponse<MaintenanceScheduleDto>>> CompleteSchedule(
         int id,
         [FromBody] CompleteMaintenanceDto completeDto,
@@ -108,7 +110,7 @@ public class MaintenanceController : ApiControllerBase
 
     /// <summary>Deletes a maintenance schedule (Admin only).</summary>
     [HttpDelete("{id:int}")]
-    [Authorize(Policy = AuthConstants.Policies.AdminOnly)]
+    [HasPermission(Permissions.Maintenance.Manage)]
     public async Task<ActionResult<ApiResponse<bool>>> DeleteSchedule(
         int id,
         CancellationToken cancellationToken

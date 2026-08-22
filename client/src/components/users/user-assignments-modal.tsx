@@ -78,7 +78,7 @@ export function UserAssignmentsModal({
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-white">
-                    {a.equipmentName}
+                    {a.itemName}
                   </p>
                   <p className="truncate text-xs text-slate-500">
                     ×{a.assignedQuantity} · assigned {formatDate(a.assignedDate)}

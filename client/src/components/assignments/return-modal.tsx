@@ -71,7 +71,7 @@ export function ReturnModal({
         description:
           qty < outstanding
             ? `${qty} of ${outstanding} returned; ${outstanding - qty} still out.`
-            : `${assignment.equipmentName} returned to stock.`,
+            : `${assignment.itemName} returned to stock.`,
       });
       onDone();
       onClose();
@@ -92,7 +92,7 @@ export function ReturnModal({
       title="Process return"
       description={
         assignment
-          ? `${assignment.equipmentName} · ${outstanding} outstanding from ${assignment.userName}`
+          ? `${assignment.itemName} · ${outstanding} outstanding from ${assignment.userName}`
           : undefined
       }
       footer={

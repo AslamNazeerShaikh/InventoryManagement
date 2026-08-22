@@ -173,7 +173,7 @@ export default function DashboardPage() {
                   count={expiring.data?.length ?? 0}
                   items={(expiring.data ?? []).slice(0, 4).map((i) => ({
                     id: i.id,
-                    primary: i.equipmentName,
+                    primary: i.name,
                     secondary:
                       i.expiryDate != null
                         ? `${describeDays(daysUntil(i.expiryDate))} · ${formatDate(i.expiryDate)}`
@@ -204,7 +204,7 @@ export default function DashboardPage() {
                   count={lowStock.data?.length ?? 0}
                   items={(lowStock.data ?? []).slice(0, 4).map((i) => ({
                     id: i.id,
-                    primary: i.equipmentName,
+                    primary: i.name,
                     secondary: `${i.availableQuantity} of ${i.quantity} available`,
                   }))}
                   emptyText="Stock levels are healthy"
@@ -234,7 +234,7 @@ export default function DashboardPage() {
                     count={data.overdue.length}
                     items={data.overdue.slice(0, 4).map((a) => ({
                       id: a.id,
-                      primary: a.equipmentName,
+                      primary: a.itemName,
                       secondary: `${a.userName} · due ${formatDate(a.expectedReturnDate)}`,
                     }))}
                     emptyText="No overdue returns"
@@ -366,7 +366,7 @@ function RecentInventoryRow({ item }: { item: InventoryDto }) {
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-white">
-          {item.equipmentName}
+          {item.name}
         </p>
         <p className="truncate text-xs text-slate-500">
           {item.category ?? "Uncategorized"} · {formatRelativeTime(item.createdAt)}
@@ -385,7 +385,7 @@ function RecentAssignmentRow({ assignment }: { assignment: InventoryAssignmentDt
       <Avatar name={assignment.userName} size="sm" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-white">
-          {assignment.equipmentName}
+          {assignment.itemName}
         </p>
         <p className="truncate text-xs text-slate-500">
           {assignment.userName} · {formatRelativeTime(assignment.assignedDate)}

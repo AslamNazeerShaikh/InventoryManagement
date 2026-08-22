@@ -17,7 +17,7 @@ public class InventoryConfiguration : IEntityTypeConfiguration<Inventory>
         builder.HasKey(i => i.Id);
 
         // Properties
-        builder.Property(i => i.EquipmentName).IsRequired().HasMaxLength(200);
+        builder.Property(i => i.Name).IsRequired().HasMaxLength(200);
 
         builder.Property(i => i.Description).HasMaxLength(1000);
 
@@ -53,7 +53,7 @@ public class InventoryConfiguration : IEntityTypeConfiguration<Inventory>
         builder.Property(i => i.DeletedBy).HasMaxLength(100);
 
         // Indexes
-        builder.HasIndex(i => i.EquipmentName).HasDatabaseName("IX_Inventories_EquipmentName");
+        builder.HasIndex(i => i.Name).HasDatabaseName("IX_Inventories_Name");
 
         // Provider-agnostic composite lookups (tenant-scoped). Uniqueness "when present" for
         // barcode/serial is enforced per-tenant in the application layer (InventoryService), because a
