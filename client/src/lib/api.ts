@@ -91,7 +91,13 @@ export function getStoredUser(): UserDto | null {
   const raw = localStorage.getItem(STORAGE_KEYS.user);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as UserDto;
+    const parsed = JSON.parse(raw) as UserDto;
+    // Sessions persisted before roles/permissions existed lack these arrays.
+    return {
+      ...parsed,
+      roles: parsed.roles ?? [],
+      permissions: parsed.permissions ?? [],
+    };
   } catch {
     return null;
   }

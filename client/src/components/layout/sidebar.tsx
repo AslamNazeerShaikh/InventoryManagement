@@ -89,8 +89,8 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                 {user.name}
               </p>
               <div className="mt-0.5">
-                <Badge tone={roleTone(user.roles[0] ?? "")}>
-                  {user.roles[0] ?? "Member"}
+                <Badge tone={roleTone(user.roles?.[0] ?? "")}>
+                  {user.roles?.[0] ?? "Member"}
                 </Badge>
               </div>
             </div>

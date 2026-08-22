@@ -58,7 +58,7 @@ export function UserMenu() {
               </div>
             </div>
             <div className="px-3 pb-2">
-              <Badge tone={roleTone(user.roles[0] ?? "")}>{user.roles[0] ?? "Member"}</Badge>
+              <Badge tone={roleTone(user.roles?.[0] ?? "")}>{user.roles?.[0] ?? "Member"}</Badge>
             </div>
             <div className="my-1 h-px bg-white/[0.06]" />
             <Link
