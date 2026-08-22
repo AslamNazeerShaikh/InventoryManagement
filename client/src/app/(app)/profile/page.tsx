@@ -49,7 +49,10 @@ export default function ProfilePage() {
         roleIds: null,
         isActive: user!.isActive,
       });
-      applyUser(updated);
+      // The generic UserDto carries roles but not permission codes (those are issued
+      // from JWT claims at login/refresh). A self-service name/email edit can't change
+      // them, so keep the session's permissions to preserve client-side access gating.
+      applyUser({ ...updated, permissions: user!.permissions });
       toast.success("Profile updated");
     } catch (err) {
       toast.error("Update failed", {
