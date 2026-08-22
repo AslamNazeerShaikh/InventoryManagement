@@ -17,15 +17,24 @@ public class UserRepository : GenericRepository<User>, IUserRepository
         string email,
         CancellationToken cancellationToken = default
     ) =>
+        // Pre-authentication lookup: bypass the tenant filter (the tenant is unknown until the user is
+        // resolved) while still excluding soft-deleted accounts. Email is globally unique.
         await EntitySet
-            .FirstOrDefaultAsync(x => x.Email == email, cancellationToken)
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.Email == email && !x.IsDeleted, cancellationToken)
             .ConfigureAwait(false);
 
     /// <inheritdoc />
     public async Task<bool> IsEmailExistsAsync(
         string email,
         CancellationToken cancellationToken = default
-    ) => await EntitySet.AnyAsync(x => x.Email == email, cancellationToken).ConfigureAwait(false);
+    ) =>
+        // Email is the global (pre-tenant) login key, so uniqueness is enforced across all tenants;
+        // this deliberately bypasses the tenant filter but ignores soft-deleted rows.
+        await EntitySet
+            .IgnoreQueryFilters()
+            .AnyAsync(x => x.Email == email && !x.IsDeleted, cancellationToken)
+            .ConfigureAwait(false);
 
     /// <inheritdoc />
     public async Task<User?> GetByActiveRefreshTokenHashAsync(
@@ -34,13 +43,17 @@ public class UserRepository : GenericRepository<User>, IUserRepository
         CancellationToken cancellationToken = default
     ) =>
         // Tracked (not AsNoTracking): the caller rotates the token and persists the same instance.
+        // Cross-tenant by design (the token itself identifies the user), so the tenant filter is
+        // bypassed; soft-deleted accounts are still excluded.
         await EntitySet
+            .IgnoreQueryFilters()
             .FirstOrDefaultAsync(
                 x =>
                     x.RefreshToken == refreshTokenHash
                     && x.RefreshTokenExpiryTime != null
                     && x.RefreshTokenExpiryTime > nowUtc
-                    && x.IsActive,
+                    && x.IsActive
+                    && !x.IsDeleted,
                 cancellationToken
             )
             .ConfigureAwait(false);

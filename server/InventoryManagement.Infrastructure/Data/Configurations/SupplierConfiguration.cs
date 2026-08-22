@@ -36,15 +36,16 @@ public class SupplierConfiguration : IEntityTypeConfiguration<Supplier>
 
         builder.Property(s => s.DeletedBy).HasMaxLength(100);
 
-        // Unique supplier name among non-deleted rows (case-insensitive collation handled by provider).
+        // Provider-agnostic tenant-scoped name lookup. Uniqueness is enforced per-tenant in the
+        // application layer (SupplierService.IsNameExistsAsync); a filtered unique index would need
+        // provider-specific raw SQL, avoided for cross-provider portability.
         builder
-            .HasIndex(s => s.Name)
-            .IsUnique()
-            .HasDatabaseName("IX_Suppliers_Name")
-            .HasFilter("[IsDeleted] = 0");
+            .HasIndex(s => new { s.TenantId, s.Name })
+            .HasDatabaseName("IX_Suppliers_TenantId_Name");
 
         builder.HasIndex(s => s.IsActive).HasDatabaseName("IX_Suppliers_IsActive");
 
-        builder.HasQueryFilter(s => !s.IsDeleted);
+        // Tenant isolation is enforced by the central global query filter in
+        // AppDbContext.OnModelCreating (the composite tenant index above serves tenant scans).
     }
 }

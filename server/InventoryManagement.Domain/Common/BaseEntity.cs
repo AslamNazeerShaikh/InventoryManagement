@@ -9,6 +9,14 @@ public abstract class BaseEntity
     /// <summary>Surrogate primary key (database-generated identity).</summary>
     public int Id { get; set; }
 
+    /// <summary>
+    /// Owning tenant. Every persisted row belongs to exactly one tenant; the persistence layer
+    /// filters all queries by this value and stamps it on insert, giving row-level isolation for a
+    /// multi-tenant / multi-client deployment. Left as <see cref="Guid.Empty"/> until stamped on
+    /// save (or backfilled to the default tenant for pre-existing rows).
+    /// </summary>
+    public Guid TenantId { get; set; }
+
     /// <summary>UTC timestamp captured when the row was first inserted.</summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

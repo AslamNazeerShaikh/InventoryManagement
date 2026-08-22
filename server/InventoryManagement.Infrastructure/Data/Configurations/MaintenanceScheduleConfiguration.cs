@@ -54,6 +54,8 @@ public class MaintenanceScheduleConfiguration : IEntityTypeConfiguration<Mainten
             .HasForeignKey(m => m.PerformedByUserId)
             .OnDelete(DeleteBehavior.SetNull);
 
-        builder.HasQueryFilter(m => !m.IsDeleted);
+        // Tenant isolation index; the tenant + soft-delete global filter is applied centrally in
+        // AppDbContext.OnModelCreating for every BaseEntity.
+        builder.HasIndex(m => m.TenantId).HasDatabaseName("IX_MaintenanceSchedules_TenantId");
     }
 }

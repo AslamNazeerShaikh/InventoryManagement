@@ -16,6 +16,7 @@ public static class MappingExtensions
         return new UserDto
         {
             Id = user.Id,
+            TenantId = user.TenantId,
             Name = user.Name,
             Email = user.Email,
             IsAdmin = user.IsAdmin,

@@ -33,7 +33,7 @@ public class InventoryConfiguration : IEntityTypeConfiguration<Inventory>
 
         builder.Property(i => i.Barcode).HasMaxLength(BusinessConstants.Inventory.MaxBarcodeLength);
 
-        builder.Property(i => i.PurchasePrice).HasColumnType("decimal(18,2)");
+        builder.Property(i => i.PurchasePrice).HasPrecision(18, 2);
 
         builder.Property(i => i.Supplier).HasMaxLength(200);
 
@@ -55,17 +55,17 @@ public class InventoryConfiguration : IEntityTypeConfiguration<Inventory>
         // Indexes
         builder.HasIndex(i => i.EquipmentName).HasDatabaseName("IX_Inventories_EquipmentName");
 
+        // Provider-agnostic composite lookups (tenant-scoped). Uniqueness "when present" for
+        // barcode/serial is enforced per-tenant in the application layer (InventoryService), because a
+        // partial/filtered unique index needs provider-specific raw SQL ("[col] IS NOT NULL"), which
+        // is deliberately avoided so the model maps cleanly onto any SQL provider.
         builder
-            .HasIndex(i => i.Barcode)
-            .IsUnique()
-            .HasDatabaseName("IX_Inventories_Barcode")
-            .HasFilter("[Barcode] IS NOT NULL AND [IsDeleted] = 0");
+            .HasIndex(i => new { i.TenantId, i.Barcode })
+            .HasDatabaseName("IX_Inventories_TenantId_Barcode");
 
         builder
-            .HasIndex(i => i.SerialNumber)
-            .IsUnique()
-            .HasDatabaseName("IX_Inventories_SerialNumber")
-            .HasFilter("[SerialNumber] IS NOT NULL AND [IsDeleted] = 0");
+            .HasIndex(i => new { i.TenantId, i.SerialNumber })
+            .HasDatabaseName("IX_Inventories_TenantId_SerialNumber");
 
         builder.HasIndex(i => i.Category).HasDatabaseName("IX_Inventories_Category");
 
@@ -108,7 +108,8 @@ public class InventoryConfiguration : IEntityTypeConfiguration<Inventory>
             .HasForeignKey(i => i.LocationId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // Query filters for soft delete
-        builder.HasQueryFilter(i => !i.IsDeleted);
+        // The tenant + soft-delete global query filter is applied centrally in
+        // AppDbContext.OnModelCreating for every BaseEntity (the composite tenant indexes above serve
+        // tenant-scoped scans, so no standalone tenant index is needed here).
     }
 }

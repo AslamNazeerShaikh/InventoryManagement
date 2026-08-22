@@ -95,7 +95,8 @@ public class InventoryAssignmentConfiguration : IEntityTypeConfiguration<Invento
             .HasForeignKey(ia => ia.ReturnedToUserId)
             .OnDelete(DeleteBehavior.SetNull);
 
-        // Query filters for soft delete
-        builder.HasQueryFilter(ia => !ia.IsDeleted);
+        // Tenant isolation index; the tenant + soft-delete global filter is applied centrally in
+        // AppDbContext.OnModelCreating for every BaseEntity.
+        builder.HasIndex(ia => ia.TenantId).HasDatabaseName("IX_InventoryAssignments_TenantId");
     }
 }
