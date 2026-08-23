@@ -1,6 +1,7 @@
 using InventoryManagement.Domain.Exceptions;
 using InventoryManagement.Domain.Interfaces;
 using InventoryManagement.Infrastructure.Data;
+using InventoryManagement.Infrastructure.Data.Providers;
 using Microsoft.EntityFrameworkCore;
 
 namespace InventoryManagement.Infrastructure.Repositories;
@@ -14,6 +15,7 @@ namespace InventoryManagement.Infrastructure.Repositories;
 public sealed class UnitOfWork : IUnitOfWork
 {
     private readonly AppDbContext _dbContext;
+    private readonly IDatabaseProviderDialect _dialect;
 
     /// <summary>Creates the unit of work over the shared context and repositories.</summary>
     public UnitOfWork(
@@ -31,6 +33,9 @@ public sealed class UnitOfWork : IUnitOfWork
     )
     {
         _dbContext = dbContext;
+        // Resolved from the configured provider (not injected) so every context — runtime, seeding,
+        // design-time and tests — translates store errors with the dialect that actually produced them.
+        _dialect = DatabaseProviderDialects.For(dbContext.Database.ProviderName);
         Users = users;
         Inventories = inventories;
         InventoryAssignments = inventoryAssignments;
@@ -82,10 +87,21 @@ public sealed class UnitOfWork : IUnitOfWork
         }
         catch (DbUpdateConcurrencyException ex)
         {
-            var entityName = ex.Entries.Count > 0 ? ex.Entries[0].Entity.GetType().Name : "record";
-            throw new ConcurrencyConflictException(entityName);
+            throw new ConcurrencyConflictException(ResolveEntityName(ex));
+        }
+        catch (DbUpdateException ex) when (_dialect.IsUniqueConstraintViolation(ex))
+        {
+            // A concurrent writer inserted the same unique value after the application-level
+            // pre-check passed (check-then-act). The store correctly rejected the duplicate, so this
+            // is a conflict — not a server fault — and must surface as 409 rather than 500. Any
+            // other DbUpdateException (foreign key, NOT NULL, …) is left untouched.
+            throw new DuplicateEntityException(ResolveEntityName(ex), ex);
         }
     }
+
+    /// <summary>Names the entity a failed save was attempting to write, for the error message.</summary>
+    private static string ResolveEntityName(DbUpdateException exception) =>
+        exception.Entries.Count > 0 ? exception.Entries[0].Entity.GetType().Name : "record";
 
     /// <inheritdoc />
     public async Task<TResult> ExecuteInTransactionAsync<TResult>(

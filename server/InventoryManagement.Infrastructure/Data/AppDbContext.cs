@@ -1,8 +1,10 @@
+using System.Linq.Expressions;
 using System.Reflection;
 using InventoryManagement.Domain.Common;
 using InventoryManagement.Domain.Constants;
 using InventoryManagement.Domain.Entities;
 using InventoryManagement.Domain.Security;
+using InventoryManagement.Infrastructure.Data.Providers;
 using Microsoft.EntityFrameworkCore;
 
 namespace InventoryManagement.Infrastructure.Data;
@@ -88,6 +90,8 @@ public class AppDbContext : DbContext
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
 
+        ApplyUniqueWhenPresentIndexes(modelBuilder);
+
         // Provider-agnostic cross-cutting model rules for every BaseEntity: an optimistic concurrency
         // token plus a single global query filter enforcing tenant isolation and soft-delete.
         // Centralizing the filter keeps it identical across all entities (avoiding required-navigation
@@ -107,6 +111,69 @@ public class AppDbContext : DbContext
             SetGlobalQueryFilterMethod
                 .MakeGenericMethod(entityType.ClrType)
                 .Invoke(this, new object[] { modelBuilder });
+        }
+    }
+
+    /// <summary>
+    /// Adds the per-tenant "unique when present" constraints that the application layer cannot
+    /// enforce safely on its own: an <c>IsBarcodeExistsAsync</c>/<c>IsSerialNumberExistsAsync</c>
+    /// pre-check followed by an insert is a check-then-act race, so without a real constraint two
+    /// concurrent creates both succeed and silently produce duplicate rows.
+    /// <para>
+    /// The constraint has to skip rows with no barcode/serial (many items legitimately have none, and
+    /// a plain unique index would either reject them — SQL Server treats NULLs as equal — or collide
+    /// on empty strings) and skip soft-deleted rows (so a barcode can be reused after deletion, which
+    /// is what the soft-delete-aware pre-check already implies). That means a filtered/partial index,
+    /// whose predicate is the one piece of SQL that cannot be written provider-agnostically; it is
+    /// obtained from <see cref="IDatabaseProviderDialect"/> and applied here, where the configured
+    /// provider is known. For an unrecognized provider no filter is available and the index is
+    /// skipped, leaving the previous (application-only) behaviour untouched.
+    /// </para>
+    /// <para>
+    /// These are separate, additionally named indexes rather than <c>IsUnique</c> on the existing
+    /// composite lookup indexes in <see cref="Configurations.InventoryConfiguration"/>: a partial
+    /// index whose predicate includes <c>&lt;&gt; ''</c> cannot be proven applicable for a plain
+    /// <c>WHERE TenantId = @t AND Barcode = @b</c> lookup, so the unfiltered index is kept for reads
+    /// while these enforce integrity.
+    /// </para>
+    /// </summary>
+    private void ApplyUniqueWhenPresentIndexes(ModelBuilder modelBuilder)
+    {
+        var dialect = DatabaseProviderDialects.For(Database.ProviderName);
+
+        AddUniqueWhenPresentIndex(
+            nameof(Inventory.Barcode),
+            "UX_Inventories_TenantId_Barcode",
+            i => new { i.TenantId, i.Barcode }
+        );
+
+        AddUniqueWhenPresentIndex(
+            nameof(Inventory.SerialNumber),
+            "UX_Inventories_TenantId_SerialNumber",
+            i => new { i.TenantId, i.SerialNumber }
+        );
+
+        void AddUniqueWhenPresentIndex(
+            string valueColumn,
+            string indexName,
+            Expression<Func<Inventory, object?>> keySelector
+        )
+        {
+            var filter = dialect.BuildUniqueWhenPresentFilter(
+                valueColumn,
+                nameof(BaseEntity.IsDeleted)
+            );
+            if (filter is null)
+            {
+                return;
+            }
+
+            modelBuilder
+                .Entity<Inventory>()
+                .HasIndex(keySelector, indexName)
+                .IsUnique()
+                .HasFilter(filter)
+                .HasDatabaseName(indexName);
         }
     }
 
