@@ -5,6 +5,7 @@ using InventoryManagement.Domain.Entities;
 using InventoryManagement.Domain.Interfaces;
 using InventoryManagement.Domain.Security;
 using InventoryManagement.Infrastructure.Data;
+using InventoryManagement.Infrastructure.Data.Providers;
 using InventoryManagement.Infrastructure.Idempotency;
 using InventoryManagement.Infrastructure.Multitenancy;
 using InventoryManagement.Infrastructure.Repositories;
@@ -94,6 +95,8 @@ public static class ServiceCollectionExtensions
 
         await context.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
 
+        WarnIfUniquenessCannotBeEnforced(context, logger);
+
         // Seed the tenant's permission catalog and system roles (idempotent).
         await SeedTenantRbacAsync(context, cancellationToken).ConfigureAwait(false);
 
@@ -142,6 +145,36 @@ public static class ServiceCollectionExtensions
         await EnsureAdminRoleAsync(context, adminUser.Id, cancellationToken).ConfigureAwait(false);
 
         return serviceProvider;
+    }
+
+    /// <summary>
+    /// Emits a critical log entry when the configured provider has no <see cref="IDatabaseProviderDialect"/>.
+    /// <para>
+    /// Such a provider silently loses two guarantees: the filtered per-tenant "unique when present"
+    /// indexes on <c>Inventory.Barcode</c>/<c>SerialNumber</c> are not created, and store-level
+    /// unique violations are no longer recognized (so they surface as HTTP 500 instead of 409).
+    /// Because the check-then-act pre-check in the application layer cannot prevent a concurrent
+    /// duplicate on its own, that combination silently readmits duplicate rows. Startup is not
+    /// aborted — an unlisted provider may still be operationally sound — but the loss of an
+    /// integrity constraint must never be inferred only from its absence.
+    /// </para>
+    /// </summary>
+    private static void WarnIfUniquenessCannotBeEnforced(AppDbContext context, ILogger logger)
+    {
+        var providerName = context.Database.ProviderName;
+        if (DatabaseProviderDialects.CanEnforceUniqueWhenPresent(providerName))
+        {
+            return;
+        }
+
+        logger.LogCritical(
+            "Database provider {Provider} has no registered dialect: the per-tenant unique-when-present "
+                + "indexes on Inventory.Barcode/SerialNumber were NOT created and unique violations will "
+                + "surface as HTTP 500 instead of 409, so concurrent creates can persist duplicate "
+                + "barcodes/serial numbers. Register an IDatabaseProviderDialect for this provider "
+                + "before running it in production.",
+            providerName ?? "(none)"
+        );
     }
 
     /// <summary>Seeds the permission catalog and system roles (with default grants) for the current tenant. Idempotent.</summary>

@@ -55,10 +55,12 @@ public class InventoryConfiguration : IEntityTypeConfiguration<Inventory>
         // Indexes
         builder.HasIndex(i => i.Name).HasDatabaseName("IX_Inventories_Name");
 
-        // Provider-agnostic composite lookups (tenant-scoped). Uniqueness "when present" for
-        // barcode/serial is enforced per-tenant in the application layer (InventoryService), because a
-        // partial/filtered unique index needs provider-specific raw SQL ("[col] IS NOT NULL"), which
-        // is deliberately avoided so the model maps cleanly onto any SQL provider.
+        // Provider-agnostic composite lookups (tenant-scoped) serving barcode/serial reads. Uniqueness
+        // "when present" for barcode/serial cannot be enforced by the application layer alone (the
+        // pre-check + insert is a check-then-act race), so it is enforced by the per-tenant filtered
+        // unique indexes added in AppDbContext.ApplyUniqueWhenPresentIndexes — the filter predicate is
+        // the only provider-specific SQL and comes from IDatabaseProviderDialect. These unfiltered
+        // indexes are kept because a partial index is not usable for a plain equality lookup.
         builder
             .HasIndex(i => new { i.TenantId, i.Barcode })
             .HasDatabaseName("IX_Inventories_TenantId_Barcode");

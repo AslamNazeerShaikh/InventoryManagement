@@ -20,7 +20,7 @@ However, measured against the stated goal — *a reusable, domain‑agnostic, mu
 | 2 | **Data store** | **SQLite** is a single‑writer, single‑file engine. It cannot scale horizontally or sustain high write concurrency. | 🔴 Critical |
 | 3 | **Domain coupling** | Entities/roles are **medical‑inventory specific** (`EquipmentName`, `NursePractitioner`, "medical equipment"), so the system is not domain‑agnostic. | 🟠 High |
 
-Plus a set of correctness/security issues that matter at scale: a **double‑execution race in idempotency reclaim**, **check‑then‑act (TOCTOU) duplicate detection returning HTTP 500**, **login user‑enumeration timing side‑channel**, **non‑revocable JWTs**, **per‑instance in‑memory rate limiting**, **unbounded list endpoints**, and **leading‑wildcard `LIKE` search**.
+Plus a set of correctness/security issues that matter at scale: a **double‑execution race in idempotency reclaim**, **check‑then‑act (TOCTOU) duplicate detection** that silently admitted duplicate barcode/serial rows and returned HTTP 500 for duplicate emails (both now fixed — [F‑12](#f-12--check-then-act-duplicate-detection--silent-duplicate-rows-and-http-500-under-race)), **login user‑enumeration timing side‑channel**, **non‑revocable JWTs**, **per‑instance in‑memory rate limiting**, **unbounded list endpoints**, and **leading‑wildcard `LIKE` search**.
 
 **Severity legend:** 🔴 Critical · 🟠 High · 🟡 Medium · 🔵 Low / hardening · 🟢 Positive
 
@@ -142,7 +142,7 @@ The current provider is SQLite ([ServiceCollectionExtensions](server/InventoryMa
 
 **Recommendation**
 - **Plan A:** make pagination mandatory — remove or cap the "get all" endpoints (server‑enforced `MaxPageSize`, already present in [BusinessConstants.Pagination](server/InventoryManagement.Domain/Constants)); return the paged shape everywhere.
-- **Plan B:** keyset (seek) pagination `WHERE (CreatedAt,Id) < (@c,@id) ORDER BY … LIMIT n` for O(log n) deep paging instead of `Skip/Take` (offset paging degrades at high offsets — see [F‑12](#f-12--offset-pagination-degrades-at-depth)).
+- **Plan B:** keyset (seek) pagination `WHERE (CreatedAt,Id) < (@c,@id) ORDER BY … LIMIT n` for O(log n) deep paging instead of `Skip/Take` (offset paging degrades at high offsets — see [F‑14](#f-14--offset-pagination-degrades-at-depth)).
 
 ---
 
@@ -233,16 +233,36 @@ The current provider is SQLite ([ServiceCollectionExtensions](server/InventoryMa
 
 ---
 
-### F‑12 · Check‑then‑act duplicate detection → HTTP 500 under race (and TOCTOU)
-**Severity:** 🟠 High · **Category:** Concurrency / Correctness / UX
+### F‑12 · Check‑then‑act duplicate detection → silent duplicate rows and HTTP 500 under race
+**Severity:** 🔴 Critical (barcode / serial) · 🟠 High (email) · **Category:** Concurrency / Data integrity / UX
 
-**Evidence:** [InventoryService.CreateInventoryAsync](server/InventoryManagement.Application/Services/InventoryService.cs#L74-L110) does `IsBarcodeExistsAsync(...)` / `IsSerialNumberExistsAsync(...)` **then** `AddAsync` + `SaveChangesAsync`. The same pattern is in `UpdateInventoryAsync` and, for email, [UserService.CreateUserAsync](server/InventoryManagement.Application/Services/UserService.cs). Only `DbUpdateConcurrencyException` is translated in [UnitOfWork.SaveChangesAsync](server/InventoryManagement.Infrastructure/Repositories/UnitOfWork.cs); a **unique‑index violation** surfaces as a generic `DbUpdateException`.
+Every duplicate check in the application layer has the *check‑then‑act* (TOCTOU) shape — `IsXExistsAsync(...)` **then** `AddAsync` + `SaveChangesAsync`, with nothing spanning the two steps: [InventoryService.CreateInventoryAsync](server/InventoryManagement.Application/Services/InventoryService.cs#L72-L115) / `UpdateInventoryAsync`, and [UserService.CreateUserAsync](server/InventoryManagement.Application/Services/UserService.cs#L75-L100) / `UpdateUserAsync`. But the race fails **differently** per column, because only `User.Email` was actually backed by a database constraint — so this finding has two sub‑cases with different failure modes, severities and fixes.
 
-**Impact:** Two concurrent creates with the same barcode/serial/email both pass the existence check, then the second insert violates the unique index → uncaught `DbUpdateException` → **HTTP 500** instead of a clean **409 Conflict**. This is the classic *check‑then‑act* anti‑pattern: correct data outcome (the index protects integrity) but wrong status code, noisy 500s, and a poor client contract.
+#### F‑12a · `Inventory.Barcode` / `Inventory.SerialNumber` — duplicate rows, silently
+**Sub‑severity:** 🔴 Critical
+
+**Evidence:** [InventoryConfiguration](server/InventoryManagement.Infrastructure/Data/Configurations/InventoryConfiguration.cs#L55-L68) created the tenant‑scoped barcode/serial indexes **without `.IsUnique()`** — confirmed in [AppDbContextModelSnapshot](server/InventoryManagement.Infrastructure/Migrations/AppDbContextModelSnapshot.cs#L218-L222) (plain `HasIndex("TenantId", "Barcode")`). This was deliberate: a partial/filtered unique index needs provider‑specific raw SQL, so uniqueness "when present" was delegated to the application layer.
+
+**Impact:** with **no** constraint the losing writer never fails. Two concurrent creates carrying the same barcode both pass the pre‑check and **both commit** → two inventory rows sharing the item‑identity key, with no exception, no log and no 409. `GetInventoryByBarcodeAsync` then silently returns whichever row EF sees first, and per‑item stock/assignment reasoning is corrupted. Undetected data corruption is **worse** than the 500 originally documented here, and mapping `DbUpdateException → 409` does nothing for it — a real constraint is required.
+
+**✅ Fixed:** per‑tenant **filtered unique indexes** `UX_Inventories_TenantId_Barcode` / `UX_Inventories_TenantId_SerialNumber` ([AppDbContext.ApplyUniqueWhenPresentIndexes](server/InventoryManagement.Infrastructure/Data/AppDbContext.cs), migration `AddInventoryUniqueWhenPresentIndexes`). The predicate exempts absent values (`IS NULL` / `= ''`) and soft‑deleted rows, so items with no barcode remain legal and a barcode can be reused after deletion; the same barcode in a different tenant is still allowed. The predicate is the only provider‑specific SQL and is produced by `IDatabaseProviderDialect` ([Data/Providers](server/InventoryManagement.Infrastructure/Data/Providers/DatabaseProviderDialects.cs)) for SQLite / SQL Server / PostgreSQL, so the model stays portable ([F‑03](#f-03--provider-specific-sql-breaks-framework-agnosticism)); an unrecognized provider simply gets no index. The unfiltered composite indexes are kept for lookups, because a partial index is not provably applicable to a plain equality query.
+
+#### F‑12b · `User.Email` — correct data, wrong status code
+**Sub‑severity:** 🟠 High
+
+**Evidence:** [UserConfiguration](server/InventoryManagement.Infrastructure/Data/Configurations/UserConfiguration.cs#L37) *does* declare a real unique index (`IX_Users_Email`), but [UnitOfWork.SaveChangesAsync](server/InventoryManagement.Infrastructure/Repositories/UnitOfWork.cs) translated only `DbUpdateConcurrencyException`; a unique‑index violation surfaces as a generic `DbUpdateException` and escaped untranslated.
+
+**Impact:** integrity is preserved (the database rejects the duplicate) but the client receives **HTTP 500** instead of a clean **409 Conflict** — noisy error logs, false alerting, and a non‑actionable client contract.
+
+**✅ Fixed:** `UnitOfWork.SaveChangesAsync` now catches `DbUpdateException`, asks the provider dialect whether it is a uniqueness violation (SQLite extended codes 2067/1555, SQL Server 2601/2627, PostgreSQL SQLSTATE 23505) and throws `DuplicateEntityException`, which the [GlobalExceptionHandler](server/InventoryManagement.API/Infrastructure/ErrorHandling/GlobalExceptionHandler.cs) already maps to **409**. Any other `DbUpdateException` (foreign key, NOT NULL, …) is re‑thrown untouched. The application‑layer pre‑checks stay as the fast path, so the common case still returns a field‑specific `Result.Conflict` without touching the constraint.
 
 **Recommendation**
-- **Plan A:** catch `DbUpdateException` for unique‑constraint violations in `UnitOfWork.SaveChangesAsync` (inspect the provider error) and translate to `ConflictException`/409; keep the pre‑check as a fast path.
-- **Plan B:** rely on the unique index as the single source of truth (drop the pre‑check race) and map the violation to 409 — fewer round‑trips and no TOCTOU window.
+- **Plan A (implemented):** back every "unique when present" rule with a real per‑tenant filtered unique index, and translate the provider's unique‑violation error into a 409 in one place behind a provider abstraction; keep the pre‑check as a friendly fast path.
+- **Plan B:** treat the constraint as the single source of truth and drop the pre‑checks entirely — one round‑trip fewer and no TOCTOU window at all, at the cost of a less specific conflict message. (Serializing check+insert inside `ExecuteInTransactionAsync` is *not* an adequate alternative: it needs a `SERIALIZABLE`/`BEGIN IMMEDIATE` scope to block the phantom, does not scale, and still leaves the schema unconstrained.)
+
+**Regression cover:** `DuplicateDetectionTests` (concurrent duplicate email/barcode/serial → 409 and a single row; absent‑value and cross‑tenant exemptions; barcode reuse after soft delete; non‑unique `DbUpdateException` still propagating), `DatabaseProviderDialectTests` (per‑provider error codes and filter SQL) and `GlobalExceptionHandlerTests` (409 vs 500 contract).
+
+**Residual:** `IX_Users_Email` is global (email is the pre‑tenant login key) and does not exclude soft‑deleted rows, so recreating a deleted user's email now yields a 409 rather than a 500 — better, but the reuse case remains blocked; see [F‑18](#f-18--email-not-normalized--case-sensitive-uniqueness--provider-dependent-login).
 
 ---
 
@@ -425,8 +445,8 @@ The current provider is SQLite ([ServiceCollectionExtensions](server/InventoryMa
 |---|---|
 | **Request/response mixup or crossover between users?** | **No cross‑request bleed found.** Services, repositories, `UnitOfWork`, and `DbContext` are all **scoped** per request ([Application](server/InventoryManagement.Application/Extensions/ServiceCollectionExtensions.cs) / [Infrastructure](server/InventoryManagement.Infrastructure/Extensions/ServiceCollectionExtensions.cs) DI). No mutable request state is stored in singletons. The idempotency middleware buffers into a per‑request local `MemoryStream`. ✅ |
 | **Lost updates / oversell under concurrency?** | **Prevented** by the rotating concurrency token → 409 ([F‑13](#f-13--optimistic-concurrency-with-no-retry--409-storms-on-hot-rows)). Correct, but throughput‑limited and retry‑less. ✅/⚠️ |
-| **Duplicate writes / data mixup?** | **Possible** via the idempotency reclaim race ([F‑11](#f-11--idempotency-lock-reclaim-can-double-execute-data-mixup--duplicate-write)) and via non‑atomic idempotency capture. ⚠️ |
-| **Data mismatch (wrong status code / partial writes)?** | Transactions wrap multi‑row stock changes (`ExecuteInTransactionAsync`) so partial writes roll back ✅. But duplicate‑key races return 500 instead of 409 ([F‑12](#f-12--check-then-act-duplicate-detection--http-500-under-race-and-toctou)). ⚠️ |
+| **Duplicate writes / data mixup?** | **Possible** via the idempotency reclaim race ([F‑11](#f-11--idempotency-lock-reclaim-can-double-execute-data-mixup--duplicate-write)) and via non‑atomic idempotency capture. ⚠️ Concurrent creates could also produce **two inventory rows sharing a barcode/serial** — silently, because those indexes were not unique; now blocked by per‑tenant filtered unique indexes ([F‑12](#f-12--check-then-act-duplicate-detection--silent-duplicate-rows-and-http-500-under-race)). ✅ |
+| **Data mismatch (wrong status code / partial writes)?** | Transactions wrap multi‑row stock changes (`ExecuteInTransactionAsync`) so partial writes roll back ✅. Duplicate‑key races used to return 500 instead of 409; unique violations are now translated to 409 in one place ([F‑12](#f-12--check-then-act-duplicate-detection--silent-duplicate-rows-and-http-500-under-race)). ✅ |
 | **Cross‑tenant data crossover?** | **Yes — by design gap.** No tenant isolation ([F‑01](#f-01--no-multi-tenancy-tenant-data-isolation-missing)); any user sees all tenants' data. 🔴 |
 | **Stock invariant `0 ≤ Available ≤ Quantity`?** | Enforced in stock/assignment flows (dispose/adjust/return cap logic). Consistent. ✅ |
 | **Data loss on delete?** | Soft delete everywhere (no hard deletes of business rows); ledger is append‑only with `Restrict` on the required FK. ✅ |
@@ -457,7 +477,7 @@ The current provider is SQLite ([ServiceCollectionExtensions](server/InventoryMa
 | **P0** | [F‑01](#f-01--no-multi-tenancy-tenant-data-isolation-missing) Multi‑tenancy isolation | L | Cross‑tenant breach; core to the requirement |
 | **P0** | [F‑04](#f-04--sqlite-cannot-scale-to-the-target-load) Replace SQLite | M | Hard scale ceiling |
 | **P0** | [F‑11](#f-11--idempotency-lock-reclaim-can-double-execute-data-mixup--duplicate-write) Idempotency reclaim CAS | S | Duplicate‑write correctness |
-| **P1** | [F‑12](#f-12--check-then-act-duplicate-detection--http-500-under-race-and-toctou) Map unique‑violation → 409 | S | Correct status + fewer 500s |
+| **P0** ✅ | [F‑12](#f-12--check-then-act-duplicate-detection--silent-duplicate-rows-and-http-500-under-race) Per‑tenant filtered unique index for barcode/serial + map unique‑violation → 409 | S | Silent duplicate item‑identity rows (P0) and correct status instead of 500 (P1) |
 | **P1** | [F‑05](#f-05--unbounded-get-all-endpoints-materialize-entire-tables) Bound list endpoints | S | DoS / memory |
 | **P1** | [F‑07](#f-07--rate-limiting-is-in-memory-and-auth-only) Distributed + global rate limiting | M | Abuse resilience at scale |
 | **P1** | [F‑15](#f-15--client-ip-is-unreliable-no-forwarded-headers) Forwarded headers | S | Fixes rate‑limit/logging behind proxy |
@@ -487,7 +507,7 @@ The current provider is SQLite ([ServiceCollectionExtensions](server/InventoryMa
 | F‑09 | [ServiceCollectionExtensions](server/InventoryManagement.Infrastructure/Extensions/ServiceCollectionExtensions.cs#L86) |
 | F‑10 | [IdempotencyMiddleware](server/InventoryManagement.API/Infrastructure/IdempotencyMiddleware.cs) |
 | F‑11 | [EfIdempotencyStore](server/InventoryManagement.Infrastructure/Idempotency/EfIdempotencyStore.cs), [IdempotentRequest](server/InventoryManagement.Domain/Entities/IdempotentRequest.cs) |
-| F‑12 | [InventoryService](server/InventoryManagement.Application/Services/InventoryService.cs#L74-L110), [UnitOfWork](server/InventoryManagement.Infrastructure/Repositories/UnitOfWork.cs) |
+| F‑12 | [InventoryService](server/InventoryManagement.Application/Services/InventoryService.cs#L72-L115), [UserService](server/InventoryManagement.Application/Services/UserService.cs#L75-L100), [InventoryConfiguration](server/InventoryManagement.Infrastructure/Data/Configurations/InventoryConfiguration.cs#L55-L68), [AppDbContext](server/InventoryManagement.Infrastructure/Data/AppDbContext.cs), [UnitOfWork](server/InventoryManagement.Infrastructure/Repositories/UnitOfWork.cs), [DatabaseProviderDialects](server/InventoryManagement.Infrastructure/Data/Providers/DatabaseProviderDialects.cs) |
 | F‑13 | [AppDbContext](server/InventoryManagement.Infrastructure/Data/AppDbContext.cs), [UnitOfWork](server/InventoryManagement.Infrastructure/Repositories/UnitOfWork.cs) |
 | F‑14 | [GenericRepository](server/InventoryManagement.Infrastructure/Repositories/GenericRepository.cs) |
 | F‑15 | [Program](server/InventoryManagement.API/Program.cs) |
@@ -506,4 +526,4 @@ The current provider is SQLite ([ServiceCollectionExtensions](server/InventoryMa
 
 ---
 
-*This document is an analysis artefact only — no source code was modified. Findings are ordered by requirement‑fit, then scalability, concurrency/data‑integrity, security, and code‑level anti‑patterns.*
+*This document is an analysis artefact; sub‑sections marked **✅ Fixed** record remediation that has since landed in the codebase. Findings are ordered by requirement‑fit, then scalability, concurrency/data‑integrity, security, and code‑level anti‑patterns.*

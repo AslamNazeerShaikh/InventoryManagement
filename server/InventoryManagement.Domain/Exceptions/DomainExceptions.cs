@@ -34,6 +34,15 @@ public class DuplicateEntityException : DomainException
     /// <summary>Creates the exception describing the conflicting field/value.</summary>
     public DuplicateEntityException(string entityName, string field, string value)
         : base($"{entityName} with {field} '{value}' already exists.") { }
+
+    /// <summary>
+    /// Creates the exception for a uniqueness violation reported by the database (a concurrent
+    /// writer won the race after the application-level pre-check passed). The conflicting column is
+    /// not disclosed to the caller; the provider exception is preserved as the inner exception for
+    /// server-side diagnostics.
+    /// </summary>
+    public DuplicateEntityException(string entityName, Exception innerException)
+        : base($"{entityName} with the same unique value already exists.", innerException) { }
 }
 
 /// <summary>Raised when an operation is invalid for the current entity state. Maps to HTTP 422.</summary>
