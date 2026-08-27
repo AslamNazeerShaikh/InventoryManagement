@@ -87,6 +87,19 @@ The implementation includes a security/architecture hardening refactor and a Res
 
 ---
 
+### 7. [Complexity Reduction & Simplification Game Plan](Complexity-Reduction-Game-Plan.md) 🧹
+
+**Prioritized audit of avoidable code duplication and clutter, with a phased game plan and an explicit "do not touch" guardrail list**
+
+- **Findings catalog**: backend Domain/Application, backend Infrastructure/API, and frontend duplication/dead-code/disproportionate-abstraction items, each rated by priority, difficulty, and risk
+- **Guardrails**: the tenant-isolation filter, RBAC plumbing, idempotency subsystem, and other mechanisms confirmed proportionate and explicitly out of scope
+- **Game plan**: phased sequencing (mechanical sweep → verify-then-consolidate → optional architecture calls → product decisions) with fallbacks per phase
+- **Mind map**: full category breakdown across both stacks
+
+**🎯 Use this when**: You want to reduce code size/clutter without weakening multi-tenancy, security, or scalability.
+
+---
+
 ## 🚀 Quick Start Guide
 
 ### Prerequisites Setup
